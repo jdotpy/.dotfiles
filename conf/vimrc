@@ -1,0 +1,5 @@
+filetype plugin on
+syntax on
+
+set foldmethod=indent
+set foldlevel=99

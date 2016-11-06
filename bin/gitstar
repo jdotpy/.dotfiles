@@ -1,0 +1,26 @@
+#/bin/bash
+
+# Get Command info
+if [ -z "$1" ]
+then
+	cmd="status"
+else
+	cmd=$@
+fi  
+echo "Command: $cmd"
+
+# Get directory info
+echo "Path: $PWD"
+dir_list=$(ls "$PWD")
+
+# Do Command
+for file in $dir_list
+do
+        if [ -d "$file/.git" ]
+        then
+                echo -e "\n--------------------$file--------------------\n"
+                cd $file
+                git $cmd
+                cd ..
+        fi  
+done
