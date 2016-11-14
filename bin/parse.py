@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 from pprint import pprint
-import fileinput
 import argparse
 import logging
 
@@ -12,8 +11,8 @@ except:
 import json
 import sys
 import os
+from xml.dom import minidom
 #import configParser
-#import ElementTree
 
 EXTENSIONS = {
     'json': 'json',
@@ -33,20 +32,25 @@ class ItemNotFound(NameError):
 class ParseError(ValueError):
     pass
 
-def read_data(source_file):
+def read_data(source_file, encoding):
     if source_file:
         try:
-            source = open(os.path.expanduser(source_file))
-        except OSError:
-            logging.error('Failed to open file')
+            with open(os.path.expanduser(source_file), 'rb') as source:
+                data = source.read().decode(encoding)
+        except OSError, IOError, ValueError:
+            logging.error('Failed to read file')
+        source.cose()
     else:
         source = sys.stdin
-    return source.read()
+        data = source.read()
+    return data
 
 def parse_data(data, data_format):
     if data_format == 'json':
         return json.loads(data)
-    if data_format == 'yaml':
+    elif data_format == 'xml':
+        return minidom.parseString(data)
+    elif data_format == 'yaml':
         if yaml is None:
             raise UnknownFormatError('Unknown format: ' + data_format + '. Have you installed pyyaml?')
         return json.loads(data)
@@ -64,9 +68,6 @@ def extract(data, path):
             raise ItemNotFound()
     return value
 
-def decode_data(data, encoding):
-    return data.decode(encoding)
-
 def get_file_format(filename, default=None):
     if not filename:
         return default
@@ -77,17 +78,11 @@ def main():
     parser = argparse.ArgumentParser(description='Parse and extract info.')
     parser.add_argument('source', nargs="?", help='A file source')
     parser.add_argument('--format', help='Format of data input (defaults to json if not specified by extension)')
-    parser.add_argument('--target', help='Target attribute to pull out')
-    parser.add_argument('--decode', help='Decode input from specific encoding', default='utf-8')
-    parser.add_argument('--output_format', help='Chosen output format')
-    parser.add_argument('--output_file', help='File to direct stdout to.')
+    parser.add_argument('--extract', help='Target attribute to pull out')
     args = parser.parse_args()
 
     # Read data from source
-    raw_data = read_data(args.source)
-
-    # Decode data 
-    raw_data = decode_data(raw_data, args.decode)
+    raw_data = read_data(args.source, args.decode)
 
     # Parse the data
     source_format = get_file_format(args.source, default='json')
@@ -111,7 +106,12 @@ def main():
                 print(data)
                 sys.exit(1)
 
-    print(json.dumps(data, indent=4))
+    if source_format == 'json':
+        print(json.dumps(data, indent=4))
+    elif source_format == 'xml': 
+        print(data.toprettyxml())
+    else:
+        print(data)
 
 if __name__ == '__main__':
     main()
