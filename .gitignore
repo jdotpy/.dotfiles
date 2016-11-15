@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.swp
 
 # C extensions
 *.so
@@ -90,3 +91,5 @@ ENV/
 
 # Dot-files specific
 conf/vim/.netrwhist
+
+
