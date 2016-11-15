@@ -76,8 +76,8 @@ def get_file_format(filename, default=None):
 def main():
     parser = argparse.ArgumentParser(description='Parse and extract info.')
     parser.add_argument('source', nargs="?", help='A file source')
-    parser.add_argument('--format', help='Format of data input (defaults to json if not specified by extension)')
-    parser.add_argument('--extract', help='Target attribute to pull out')
+    parser.add_argument('-f', '--format', help='Format of data input (defaults to json if not specified by extension)')
+    parser.add_argument('-e', '--extract', help='Target attribute to pull out')
     args = parser.parse_args()
 
     # Read data from source

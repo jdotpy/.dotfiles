@@ -51,8 +51,8 @@ def main():
     uuid_parser.set_defaults(func=generate_uuid)
 
     random_str_parser = subparsers.add_parser('string', help='Random string')
-    random_str_parser.add_argument('--source', help='Characters to select from (defaults to alpha-numeric)', default=string.ascii_letters + string.digits)
-    random_str_parser.add_argument('--length', type=int, help='Length of string', default=20)
+    random_str_parser.add_argument('-s', '--source', help='Characters to select from (defaults to alpha-numeric)', default=string.ascii_letters + string.digits)
+    random_str_parser.add_argument('-l', '--length', type=int, help='Length of string', default=20)
     random_str_parser.set_defaults(func=generate_random_string)
 
     args = main_parser.parse_args()
