@@ -37,9 +37,8 @@ def read_data(source_file, encoding):
         try:
             with open(os.path.expanduser(source_file), 'rb') as source:
                 data = source.read().decode(encoding)
-        except OSError, IOError, ValueError:
+        except (OSError, IOError, ValueError):
             logging.error('Failed to read file')
-        source.cose()
     else:
         source = sys.stdin
         data = source.read()
@@ -82,7 +81,7 @@ def main():
     args = parser.parse_args()
 
     # Read data from source
-    raw_data = read_data(args.source, args.decode)
+    raw_data = read_data(args.source, 'utf-8')
 
     # Parse the data
     source_format = get_file_format(args.source, default='json')
@@ -95,11 +94,11 @@ def main():
         raise e
 
     # Extract the item
-    if args.target:
+    if args.extract:
         try:
-            data = extract(data, args.target)
+            data = extract(data, args.extract)
         except ItemNotFound:
-            logging.error('Item "{}" not found!'.format(args.target))
+            logging.error('Item "{}" not found!'.format(args.extract))
             sys.exit(1)
         else:
             if not isinstance(data, dict):
