@@ -1,6 +1,9 @@
+execute pathogen#infect()
 filetype plugin on
 syntax on
 
 set foldmethod=indent
 set foldlevel=99
 hi Folded       guifg=grey guibg=darkblue ctermfg=grey ctermbg=darkblue
+
+nmap <SPACE> :FufFile<CR>A**/<backspace>
