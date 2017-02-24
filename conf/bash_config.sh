@@ -16,9 +16,9 @@ prompt() {
     branch_name=${git_head_output##refs/heads/}
   fi
   if [ -n "$branch_name" ]; then 
-    export PS1="\e[34m[\t] me \e[39m\w\e[93m {$branch_name}\e[34m$\e[39m "
+    export PS1="\[\e[34m\][\t] me \[\e[39m\]\w\[\e[93m\] {$branch_name}\[\e[34m\]$\[\e[39m\] "
   else
-    export PS1="\e[34m[\t] me \e[39m\w\e[93m\e[34m$\e[39m "
+    export PS1="\[\e[34m\][\t] me \[\e[39m\]\w\[\e[34m\]$\[\e[39m\] "
   fi
 }
 
