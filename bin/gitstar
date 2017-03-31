@@ -1,12 +1,22 @@
 #/bin/bash
-
 # Get Command info
+whitespace="[[:space:]]"
+cmd=" "
 if [ -z "$1" ]
 then
-	cmd="status"
+  cmd="status"
 else
-	cmd=$@
-fi  
+  # Build the command re-adding quoting
+  cmd=""
+  for i in "$@"
+  do
+    if [[ $i =~ $whitespace ]]
+    then
+      i=\"$i\"
+    fi
+    cmd="$cmd $i"
+  done
+fi
 echo "Command: $cmd"
 
 # Get directory info
@@ -16,11 +26,11 @@ dir_list=$(ls "$PWD")
 # Do Command
 for file in $dir_list
 do
-        if [ -d "$file/.git" ]
-        then
-                echo -e "\n--------------------$file--------------------\n"
-                cd $file
-                git $cmd
-                cd ..
-        fi  
+  if [ -d "$file/.git" ]
+  then
+    echo -e "\n--------------------$file--------------------\n"
+    cd $file
+    git $cmd
+    cd ..
+  fi
 done
