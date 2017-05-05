@@ -4,6 +4,7 @@ source ~/.dotfiles/conf/git-completion.bash
 
 alias untarball="tar -xzf"
 alias tarball="tar -czf"
+alias pyserve="python3 -m http.server"
 
 prompt() {
   ################
