@@ -1,5 +1,5 @@
 execute pathogen#infect()
-filetype plugin on
+filetype plugin indent on
 syntax on
 
 " Some random defaults
@@ -8,6 +8,8 @@ set shiftwidth=2
 set expandtab
 set foldmethod=indent
 set foldlevel=99
+set incsearch
+set hlsearch
 
 " Make the folded lines not so bright so my eyes dont hurt
 hi Folded       guifg=grey guibg=darkblue ctermfg=grey ctermbg=darkblue
