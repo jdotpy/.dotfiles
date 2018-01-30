@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+
+import subprocess
+import argparse
+import sys
+import os
+
+class BaseCommand():
+    command = None
+    help = None
+
+    def args(self, parser):
+        pass
+
+class Processes(BaseCommand):
+    command = 'process'
+    help = 'List processes'
+
+    def exec(self, args):
+        subprocess.call(["ps", "axo", "pid,ppid,lstart,rss,%mem,%cpu,ruser,command"])
+
+COMMANDS = [
+    Processes,
+]
+
+def cli():
+    parser = argparse.ArgumentParser(prog='cog')
+    subparsers = parser.add_subparsers(help='sub-command help', dest='cmd')
+    for Cmd in COMMANDS:
+        cmd = Cmd()
+        subcommand_parser = subparsers.add_parser(Cmd.command, help=Cmd.help)
+        subcommand_parser.set_defaults(func=cmd.exec)
+        cmd.args(subcommand_parser)
+    return parser
+
+def main():
+    parser = cli()
+    args = parser.parse_args(sys.argv[1:])
+    if not hasattr(args, 'func'):
+        parser.print_help()
+        return
+
+    args.func(args)
+
+if __name__ == '__main__':
+    main()

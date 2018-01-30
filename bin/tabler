@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+
+import io
+import sys
+import csv
+import json
+import argparse
+from collections import OrderedDict
+
+def print_table(entries, fields, max_cols=100, sep=' | '):
+    fields = OrderedDict(fields)
+
+    # Iterate to find the largest entries, initialize with label lengths
+    col_sizes = {field: len(str(label)) for field, label in fields.items()}
+    for entry in entries:
+        for field in fields:
+            current_max = col_sizes.get(field, 0)
+            col_sizes[field] = max(current_max, len(str(entry.get(field, ''))))
+    for field, size in col_sizes.items():
+        col_sizes[field] = min(size, max_cols)
+
+    number_of_seps = (len(fields) - 1)
+    width = sum(col_sizes.values()) + (number_of_seps * len(sep))
+
+    value_formats = ['{{:<{}}}'.format(col_sizes[field]) for field in fields.keys()]
+    template = sep.join(value_formats)
+
+    # Display header
+    truncated_headers = map(lambda h: h[:max_cols], fields.values())
+    print(template.replace('<', '^').format(*truncated_headers))
+    print('-' * width)
+    for entry in entries:
+        values = [str(entry.get(field, ''))[:max_cols] for field in fields.keys()]
+        print(template.format(*values))
+
+def parse_data(source):
+    if source == '-':
+        content = sys.stdin.read()
+    else:
+        with open(source, 'r') as f:
+            content = f.read()
+
+    cols = set()
+    try:
+        data = json.loads(content)
+        for row in data:
+            cols.update(row.keys())
+        cols = list(cols)
+        cols.sort()
+    except Exception as e:
+        data_stream = io.StringIO(content)
+        parsed_csv = csv.DictReader(data_stream)
+        cols = parsed_csv.fieldnames
+        data = list(parsed_csv)
+    return cols, data
+
+def main():
+    parser = argparse.ArgumentParser(description='Display a dataset in a table (json or csv)')
+    parser.add_argument('data_source', nargs='?', default='-', help='Source for the data (defaults to stdin)')
+    parser.add_argument('-m', '--max-cols', type=int, default=100, help='Maximum size of a column')
+    parser.add_argument('-o', '--only-columns', nargs='*', help='List of columns to retain')
+
+    args = parser.parse_args()
+    cols, data = parse_data(args.data_source)
+    if args.only_columns:
+        cols = args.only_columns
+
+    print_table(
+        data,
+        fields=[(col, col) for col in cols],
+        max_cols=args.max_cols
+    )
+
+if __name__ == '__main__':
+    main()
