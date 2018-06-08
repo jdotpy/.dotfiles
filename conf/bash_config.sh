@@ -12,7 +12,7 @@ prompt() {
   git_head_output="$(git symbolic-ref HEAD 2>&1)"
   if [[ $git_head_output == *"ref HEAD is not a symbolic ref"* ]]; then
     ps1_git_status="!Detached Head!"
-  elif [[ $git_head_output == *"Not a git repository"* ]]; then
+  elif [[ $git_head_output == *"ot a git repository"* ]]; then
     ps1_git_status=""
   else 
     ps1_git_status=${git_head_output##refs/heads/}
