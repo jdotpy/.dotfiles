@@ -8,6 +8,17 @@ import sqlite3
 import argparse
 from collections import OrderedDict
 
+class CustomCSVDialect(csv.unix_dialect):
+    skipinitialspace = True
+
+def _extract_value(source, key, max_size, default):
+    value = source.get(key, default)
+    if value is None:
+        value = default
+    if not type(value) == str:
+        value = str(value)
+    return value[:max_size]
+
 def print_table(entries, fields, max_cols=100, sep=' | '):
     fields = OrderedDict(fields)
 
@@ -31,7 +42,7 @@ def print_table(entries, fields, max_cols=100, sep=' | '):
     print(template.replace('<', '^').format(*truncated_headers))
     print('-' * width)
     for entry in entries:
-        values = [str(entry.get(field, ''))[:max_cols] for field in fields.keys()]
+        values = [_extract_value(entry, field, max_cols, '') for field in fields.keys()]
         print(template.format(*values))
 
 def parse_data(source):
@@ -50,7 +61,7 @@ def parse_data(source):
         cols.sort()
     except Exception as e:
         data_stream = io.StringIO(content)
-        parsed_csv = csv.DictReader(data_stream)
+        parsed_csv = csv.DictReader(data_stream, dialect=CustomCSVDialect)
         cols = parsed_csv.fieldnames
         data = list(parsed_csv)
     return cols, data
@@ -123,8 +134,6 @@ class TempDB():
         cols = [info[0] for info in self.cursor.description]
         return cols, result
     
-
-
 def main():
     parser = argparse.ArgumentParser(description='Display a dataset in a table (json or csv)')
     parser.add_argument('data_source', nargs='?', default='-', help='Source for the data (defaults to stdin)')
