@@ -1,9 +1,11 @@
 PATH="$PATH:~/.dotfiles/bin"
+export CLICOLOR=1
 
 source ~/.dotfiles/conf/git-completion.bash
 
 alias untarball="tar -xzf"
 alias tarball="tar -czf"
+alias ll="ls -la"
 alias pyserve="python3 -m http.server"
 
 prompt() {
