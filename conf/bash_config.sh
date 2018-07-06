@@ -39,3 +39,6 @@ prompt() {
 }
 
 PROMPT_COMMAND=prompt
+
+# Act like Vi, please
+set -o vi
