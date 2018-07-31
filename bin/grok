@@ -9,6 +9,14 @@ import os
 
 #lsof -p 93653 -b -M -P -F
 
+def format_bytesize(value, suffix='B'):
+    """ Ripped off of stack overflow and modified to use metric system """
+    for unit in ['','K','M','G','T','P','E','Z']:
+        if abs(value) < 1000.0:
+            return "%3.1f%s%s" % (value, unit, suffix)
+        value /= 1000.0
+    return "%.1f%s%s" % (value, 'Y', suffix)
+
 def _truthy(items):
     return [item for item in items if item]
 
@@ -96,27 +104,31 @@ class Command():
             return self.end_time - self.start_time
 
     def display_results(self):
-        cpu_usages = [float(e.get('%CPU')) for e in self.sys_stats]
-        mem_usages = [float(e.get('%MEM')) for e in self.sys_stats]
-        mem_sizes = [float(e.get('RSS')) for e in self.sys_stats]
-
-        elapsed_time = _parse_time(self.sys_stats[-1].get('ELAPSED'))
-        cpu_time = _parse_time(self.sys_stats[-1].get('TIME'))
-        cpu_percent = math.ceil((cpu_time / elapsed_time ) * 100)
-
         print('\n' + '-' * 30)
         print('PID: {}. Run Time: <{}s'.format(
             self.pid,
             math.ceil(self.run_time()),
         ))
+
         if self.sys_stats:
+            cpu_usages = [float(e.get('%CPU')) for e in self.sys_stats]
+            mem_usages = [float(e.get('%MEM')) for e in self.sys_stats]
+            mem_sizes = [float(e.get('RSS')) for e in self.sys_stats]
+
+            elapsed_time = _parse_time(self.sys_stats[-1].get('ELAPSED'))
+            cpu_time = _parse_time(self.sys_stats[-1].get('TIME'))
+            cpu_percent = math.ceil((cpu_time / elapsed_time ) * 100)
+
+            avg_mem_size = math.ceil(sum(mem_sizes) / len(self.sys_stats))
+            avg_mem_usage = math.ceil(sum(mem_usages) / len(self.sys_stats))
+
             print('CPU Usage: {}% (CPU Time: {})'.format(
                 cpu_percent, self.sys_stats[-1].get('TIME')
             ))
             print('AVG Memory usage: {} ({}%)  Max memory Usage: {} ({}%)'.format(
-                math.ceil(sum(mem_sizes) / len(self.sys_stats)),
-                math.ceil(sum(mem_usages) / len(self.sys_stats)),
-                max(mem_sizes),
+                format_bytesize(avg_mem_size * 1000),
+                math.ceil(avg_mem_usage),
+                format_bytesize(max(mem_sizes) * 1000),
                 max(mem_usages)
             ))
 
