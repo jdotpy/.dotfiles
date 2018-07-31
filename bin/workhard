@@ -1,0 +1,22 @@
+#!/usr/bin/env python
+
+import math
+import hashlib
+
+NUM_CHUNKS = 10
+CHUNK_SIZE = 10 * 1000 * 1000
+
+def _read_chunk():
+    with open('/dev/urandom', 'rb') as f:
+        return f.read(CHUNK_SIZE)
+
+def main():
+    hasher = hashlib.sha256()
+    for chunk_num in range(NUM_CHUNKS):
+        chunk = _read_chunk()
+        hasher.update(chunk)
+    print(hasher.hexdigest())
+
+if __name__ == '__main__':
+    main()
+

@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+
+import subprocess
+import math
+import time
+import sys
+import re
+import os
+
+#lsof -p 93653 -b -M -P -F
+
+def _truthy(items):
+    return [item for item in items if item]
+
+def _parse_time(text):
+    parts = [float(p) for p in text.split(':')]
+    if len(parts) == 2:
+        return parts[1] + (parts[0] * 60)
+    elif len(parts) == 3:
+        return parts[2] + (parts[1] * 60) + (parts[0] * 60 * 60)
+    raise ValueError('Invalid time format: {}'.format(text))
+
+def _parse_whitespace_table(text):
+    """ Dumb whitespace table parser that doesnt account for values with spaces """
+    rows = []
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        rows.append(_truthy(re.split('\s+', line)))
+
+    header = rows[0]
+    results = [dict(zip(header, row)) for row in rows[1:]]
+    return results
+
+    
+class Command():
+    STATS_INTERVAL = 0.5
+    
+    def __init__(self, args):
+        self.main_process_args = args
+        self.main_pid = None
+        self.start_time = None
+        self.end_time = None
+        self.sys_stats = []
+
+    def start(self):
+        self.main_process = subprocess.Popen(self.main_process_args, shell=True)
+        self.main_pid = self.main_process.pid
+        self.start_time = time.time()
+
+    def wait(self):
+        while self.main_process.returncode is None:
+            try:
+                self.main_process.wait(self.STATS_INTERVAL)
+            except subprocess.TimeoutExpired:
+                pass
+            self._stat_checks()
+
+        self.main_process_result = self.main_process.returncode
+        self.end_time = time.time()
+        return self.main_process_result
+
+    def kill(self):
+        if not self.main_process:
+            raise Exception('Tried to kill a process that hasnt started')
+        if self.main_process.returncode:
+            return True
+        else:
+            self.main_process.kill()
+            return True
+
+    @property
+    def pid(self):
+        return self.main_pid
+
+    def _stat_checks(self):
+        cols = ','.join(['pid', 'etime', '%cpu', '%mem', 'rss', 'cputime'])
+        sysmonitor_command = ' '.join(['ps', '-p', str(self.main_pid), '-o', cols])
+        stats_cmd_output = subprocess.run(
+            sysmonitor_command,
+            shell=True,
+            capture_output=True,
+            encoding='utf-8',
+        )
+        stats_result = _parse_whitespace_table(stats_cmd_output.stdout)
+        if stats_result:
+            print(stats_result[0])
+            self.sys_stats.append(stats_result[0])
+
+    def run_time(self):
+        if not self.start_time:
+            return 0
+        elif not self.end_time:
+            return time.time() - self.start_time
+        else:
+            return self.end_time - self.start_time
+
+    def display_results(self):
+        cpu_usages = [float(e.get('%CPU')) for e in self.sys_stats]
+        mem_usages = [float(e.get('%MEM')) for e in self.sys_stats]
+        mem_sizes = [float(e.get('RSS')) for e in self.sys_stats]
+
+        elapsed_time = _parse_time(self.sys_stats[-1].get('ELAPSED'))
+        cpu_time = _parse_time(self.sys_stats[-1].get('TIME'))
+        cpu_percent = math.ceil((cpu_time / elapsed_time ) * 100)
+
+        print('\n' + '-' * 30)
+        print('PID: {}. Run Time: <{}s'.format(
+            self.pid,
+            math.ceil(self.run_time()),
+        ))
+        if self.sys_stats:
+            print('CPU Usage: {}% (CPU Time: {})'.format(
+                cpu_percent, self.sys_stats[-1].get('TIME')
+            ))
+            print('AVG Memory usage: {} ({}%)  Max memory Usage: {} ({}%)'.format(
+                math.ceil(sum(mem_sizes) / len(self.sys_stats)),
+                math.ceil(sum(mem_usages) / len(self.sys_stats)),
+                max(mem_sizes),
+                max(mem_usages)
+            ))
+
+
+def main():
+    cmd = Command(sys.argv[1:])
+    cmd.start()
+    try:
+        cmd.wait()
+    except KeyboardInterrupt:
+        pass
+    cmd.display_results()
+
+
+if __name__ == '__main__':
+    main()
