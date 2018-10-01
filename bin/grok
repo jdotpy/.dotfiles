@@ -42,7 +42,7 @@ def _parse_whitespace_table(text):
 
     
 class Command():
-    STATS_INTERVAL = 0.5
+    STATS_INTERVAL = 0.2
     
     def __init__(self, args):
         self.main_process_args = args
@@ -117,7 +117,11 @@ class Command():
 
             elapsed_time = _parse_time(self.sys_stats[-1].get('ELAPSED'))
             cpu_time = _parse_time(self.sys_stats[-1].get('TIME'))
-            cpu_percent = math.ceil((cpu_time / elapsed_time ) * 100)
+            if elapsed_time:
+                cpu_percent = math.ceil((cpu_time / elapsed_time ) * 100)
+            else:
+                cpu_percent = 0
+
 
             avg_mem_size = math.ceil(sum(mem_sizes) / len(self.sys_stats))
             avg_mem_usage = math.ceil(sum(mem_usages) / len(self.sys_stats))
@@ -129,7 +133,7 @@ class Command():
                 format_bytesize(avg_mem_size * 1000),
                 math.ceil(avg_mem_usage),
                 format_bytesize(max(mem_sizes) * 1000),
-                max(mem_usages)
+                math.ceil(max(mem_usages))
             ))
 
 

@@ -1,0 +1,207 @@
+#!/usr/bin/env python3
+
+import asyncssh
+import argparse
+import asyncio
+import logging
+import random
+import sys
+
+logger = logging.getLogger(__file__)
+
+
+def _get_file_io(name, write=False):
+    if name == '-' and write:
+        return sys.stdout
+    elif name == '-' and not write:
+        return sys.stdin
+    else:
+        return open(name, 'w' if write else 'r')
+
+
+async def sshhandler(entry, commands, quit_on_error=True):
+    command_list = commands.splitlines()
+    command_results = []
+    async with asyncssh.connect(host, known_hosts=None) as conn:
+        for command in command_list:
+            result = await conn.run(command)
+            command_results.append({
+                'command': command,
+                'exit_code': result.exit_status,
+                'stdout': result.stdout,
+                'stderr': result.stderr,
+            })
+            if result.exit_status != 0 and quit_on_error:
+                break
+
+    success = all([r['exit_status'] == 0 for r in results])
+    if len(commands) == 1:
+        return { 'success': success, **command_results[0] }
+    return {
+        'success': success,
+        'commands': command_results,
+    }
+
+async def test_handler(entry):
+    wait_value = random.randint(1,5)
+    await asyncio.sleep(wait_value)
+    return wait_value
+  
+
+
+class Nexus():
+    """
+        :: Worker-oriented event loop processor
+
+        Workers are no longer a necessary concept in an asynchronous world. However, the concept can still be very
+        helpful for controlling resource usage on the host machine or remote systems used by the job. For this reason
+        I'm re-implementing a worker-style executor pool which could be used with jobs that are threaded or async.
+    """
+    DEFAULT_WORKERS = 5
+
+    def __init__(self, source, target, handler, stream_output=False, show_headers=False, show_progress=True, workers=DEFAULT_WORKERS):
+        self.source = source
+        self.target = target
+        self.loop = asyncio.get_event_loop()
+        self.handler = handler
+        self.queue = asyncio.Queue(loop=self.loop)
+        self.show_progress = show_progress and not stream_output
+        self.show_headers = show_headers
+        self.stream_output = stream_output
+        self.worker_count = workers
+
+        # State data
+        self.entry_count = 0
+        self.active_count = 0
+        self.all_enqueued = False
+
+        # Results
+        self.results = []
+
+    def _show_progress(self, newline=False):
+         if not self.show_progress:
+             return
+
+         count_complete = len(self.results)
+         sys.stdout.write('\r {done} out of {total} tasks complete - {percent_done}% (running={running}; pending={pending})'.format(
+             done=count_complete,
+             total=self.entry_count,
+             percent_done=int(count_complete / self.entry_count * 100),
+             running=self.active_count,
+             pending=self.queue.qsize(),
+         ))
+         if newline:
+             # Finish with a newline
+             print('')
+
+
+    def run(self):
+        self.loop.run_until_complete(self._execute_jobs())
+
+    def _is_complete(self):
+        return len(self.results) == self.entry_count
+
+    async def _execute_jobs(self):
+        # Enqueue all work tasks
+        for entry in self.source:
+            self.entry_count += 1
+            self.queue.put_nowait(entry.rstrip('\n'))
+        self.all_enqueued = True
+
+        # Start workers
+        workers = []
+        for i in range(self.worker_count):
+            workers.append(self.loop.create_task(self._worker()))
+
+        # Wait and show progress
+        while True:
+            self._show_progress()
+            await asyncio.wait(workers, timeout=0.5, loop=self.loop)
+            if self._is_complete():
+                break
+        self._show_progress(newline=True)
+        if not self.stream_output:
+            for output_entry in self.results:
+                self._output_result(output_entry)
+        return self.results
+
+    def _output_entry(self, result_entry):
+        entry, result = result_entry
+        output_entry = str(result) + '\n'
+        if self.show_headers:
+            output_entry = f'{entry}: {output_entry}'
+        self.target.write(output_entry)
+
+    async def _worker(self):
+        while True:
+            try:
+                entry = await asyncio.wait_for(self.queue.get(), timeout=.1, loop=self.loop)
+            except asyncio.TimeoutError:
+                if self.queue.qsize() == 0 and self.all_enqueued:
+                    return
+                else:
+                    continue
+            self.active_count += 1
+            try:
+                result = await self.handler(entry)
+            except Exception as e:
+                result = e
+            result_entry = (entry, result)
+            self.results.append(result_entry)
+            if self.stream_output:
+                self._output_entry(result_entry)
+            self.queue.task_done()
+            self.active_count -= 1
+
+HANDLERS = {
+    'test': test_handler,
+    'ssh': sshhandler,
+}
+
+def blade_command():
+    cmd_parser = argparse.ArgumentParser(prog='blade')
+    cmd_parser.add_argument(
+        'command',
+        nargs=1,
+        help='Command to run'
+    )
+    cmd_parser.add_argument(
+        '-i', '--input',
+        help='Set source (Default stdin)',
+        default='-',
+    )
+    cmd_parser.add_argument(
+        '-o', '--output',
+        help='Set target of output (Default stdout)',
+        default='-',
+    )
+    cmd_parser.add_argument(
+        '-m', '--module',
+        help='Operational Module',
+        choices=['test', 'ssh'],
+        default='ssh',
+    )
+    cmd_parser.add_argument(
+        '-w', '--workers',
+        type=int,
+        help='Number of concurrent workers',
+        default=10,
+    )
+    args = cmd_parser.parse_args()
+    source = _get_file_io(args.input)
+    target = _get_file_io(args.output, write=True)
+    handler = HANDLERS.get(args.module)
+
+    try:
+        nexus = Nexus(source, target, handler, show_headers=True, stream_output=True, workers=args.workers)
+        nexus.run()
+    except Exception as e:
+        logging.exception('Stream io failed:')
+    finally:
+        if hasattr(source, 'close'):
+            source.close()
+        if hasattr(target, 'close'):
+            target.close()
+
+if __name__ == '__main__':
+    blade_command()
