@@ -19,28 +19,36 @@ def _get_file_io(name, write=False):
         return open(name, 'w' if write else 'r')
 
 
-async def sshhandler(entry, commands, quit_on_error=True):
-    command_list = commands.splitlines()
-    command_results = []
-    async with asyncssh.connect(host, known_hosts=None) as conn:
-        for command in command_list:
-            result = await conn.run(command)
-            command_results.append({
-                'command': command,
-                'exit_code': result.exit_status,
-                'stdout': result.stdout,
-                'stderr': result.stderr,
-            })
-            if result.exit_status != 0 and quit_on_error:
-                break
 
-    success = all([r['exit_status'] == 0 for r in results])
-    if len(commands) == 1:
-        return { 'success': success, **command_results[0] }
-    return {
-        'success': success,
-        'commands': command_results,
-    }
+class SSHHandler():
+    def __init__(self, command, quit_on_error=True):
+        self.command = command
+        self.quit_on_error = quit_on_error
+
+    async def handle(self, entry):
+        command_list = [self.command]
+        command_results = []
+        host = entry.strip()
+        async with asyncssh.connect(host, known_hosts=None) as conn:
+            for command in command_list:
+                result = await conn.run(command)
+                command_results.append({
+                    'host': entry,
+                    'command': command,
+                    'exit_code': result.exit_status,
+                    'stdout': result.stdout,
+                    'stderr': result.stderr,
+                })
+                if result.exit_status != 0 and self.quit_on_error:
+                    break
+
+        success = all([r['exit_code'] == 0 for r in command_results])
+        if len(command_list) == 1:
+            return { 'success': success, **command_results[0] }
+        return {
+            'success': success,
+            'commands': command_results,
+        }
 
 async def test_handler(entry):
     wait_value = random.randint(1,5)
@@ -153,10 +161,6 @@ class Nexus():
             self.queue.task_done()
             self.active_count -= 1
 
-HANDLERS = {
-    'test': test_handler,
-    'ssh': sshhandler,
-}
 
 def blade_command():
     cmd_parser = argparse.ArgumentParser(prog='blade')
@@ -187,13 +191,24 @@ def blade_command():
         help='Number of concurrent workers',
         default=10,
     )
+    cmd_parser.add_argument(
+        '-d', '--headers',
+        action='store_true',
+        help='Prefix output with entry name',
+        default=False,
+    )
     args = cmd_parser.parse_args()
     source = _get_file_io(args.input)
     target = _get_file_io(args.output, write=True)
+
+    HANDLERS = {
+        'test': test_handler,
+        'ssh': SSHHandler(args.command[0]).handle,
+    }
     handler = HANDLERS.get(args.module)
 
     try:
-        nexus = Nexus(source, target, handler, show_headers=True, stream_output=True, workers=args.workers)
+        nexus = Nexus(source, target, handler, show_headers=args.headers, stream_output=True, workers=args.workers)
         nexus.run()
     except Exception as e:
         logging.exception('Stream io failed:')

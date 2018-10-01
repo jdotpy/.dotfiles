@@ -32,6 +32,7 @@ def stream(source, target, transform_py=None, filter_py=None, expression=True, f
         sys.exit(1)
 
     for line in source:
+        line = line.rstrip('\n')
         scope = {'line': line}
 
         if filter_code:
@@ -46,7 +47,7 @@ def stream(source, target, transform_py=None, filter_py=None, expression=True, f
                 transform_runner(transform_code, globals(), scope)
                 line = scope.get('result', None) or scope.get('line', None) or line
 
-        target.write(line)
+        target.write(line + '\n')
         if flush and hasattr(target, 'flush'):
             target.flush()
 
