@@ -18,8 +18,6 @@ def _get_file_io(name, write=False):
     else:
         return open(name, 'w' if write else 'r')
 
-
-
 class SSHHandler():
     def __init__(self, command, quit_on_error=True):
         self.command = command
@@ -55,8 +53,6 @@ async def test_handler(entry):
     await asyncio.sleep(wait_value)
     return wait_value
   
-
-
 class Nexus():
     """
         :: Worker-oriented event loop processor
@@ -124,13 +120,15 @@ class Nexus():
         # Wait and show progress
         while True:
             self._show_progress()
-            await asyncio.wait(workers, timeout=0.5, loop=self.loop)
+            await asyncio.wait(workers, timeout=0.1, loop=self.loop)
             if self._is_complete():
                 break
+            else:
+                self._show_progress()
         self._show_progress(newline=True)
         if not self.stream_output:
             for output_entry in self.results:
-                self._output_result(output_entry)
+                self._output_entry(output_entry)
         return self.results
 
     def _output_entry(self, result_entry):
@@ -161,7 +159,6 @@ class Nexus():
             self.queue.task_done()
             self.active_count -= 1
 
-
 def crank_command():
     cmd_parser = argparse.ArgumentParser(prog='crank')
     cmd_parser.add_argument(
@@ -169,15 +166,13 @@ def crank_command():
         nargs=1,
         help='Command to run'
     )
+    cmd_parser.add_argument('--input', help='Set source (Default stdin)', default='-')
+    cmd_parser.add_argument('--output', help='Set target of output (Default stdout)', default='-')
     cmd_parser.add_argument(
-        '-i', '--input',
-        help='Set source (Default stdin)',
-        default='-',
-    )
-    cmd_parser.add_argument(
-        '-o', '--output',
-        help='Set target of output (Default stdout)',
-        default='-',
+        '-n', '--headers-only',
+        help='Only show input values with truthy non-exception results (useful with --filter)',
+        action='store_true',
+        default=False,
     )
     cmd_parser.add_argument(
         '-m', '--module',
@@ -197,6 +192,12 @@ def crank_command():
         help='Prefix output with entry name',
         default=False,
     )
+    cmd_parser.add_argument(
+        '-p', '--progress',
+        action='store_true',
+        help='Output progress bar and dont display results until the end',
+        default=False,
+    )
     args = cmd_parser.parse_args()
     source = _get_file_io(args.input)
     target = _get_file_io(args.output, write=True)
@@ -208,7 +209,14 @@ def crank_command():
     handler = HANDLERS.get(args.module)
 
     try:
-        nexus = Nexus(source, target, handler, show_headers=args.headers, stream_output=True, workers=args.workers)
+        nexus = Nexus(
+            source,
+            target,
+            handler,
+            show_headers=args.headers,
+            stream_output=not args.progress,
+            workers=args.workers
+        )
         nexus.run()
     except Exception as e:
         logging.exception('Stream io failed:')
