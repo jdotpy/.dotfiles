@@ -162,8 +162,8 @@ class Nexus():
             self.active_count -= 1
 
 
-def blade_command():
-    cmd_parser = argparse.ArgumentParser(prog='blade')
+def crank_command():
+    cmd_parser = argparse.ArgumentParser(prog='crank')
     cmd_parser.add_argument(
         'command',
         nargs=1,
@@ -219,4 +219,4 @@ def blade_command():
             target.close()
 
 if __name__ == '__main__':
-    blade_command()
+    crank_command()
