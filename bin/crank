@@ -5,6 +5,7 @@ import argparse
 import asyncio
 import logging
 import random
+import json
 import sys
 
 logger = logging.getLogger(__file__)
@@ -18,17 +19,64 @@ def _get_file_io(name, write=False):
     else:
         return open(name, 'w' if write else 'r')
 
-class SSHHandler():
-    def __init__(self, command, quit_on_error=True):
-        self.command = command
-        self.quit_on_error = quit_on_error
+class ScpHandler():
+    def __init__(self, source=None, target=None):
+        self.source = source
+        self.target = target
 
-    async def handle(self, entry):
-        command_list = [self.command]
+    @classmethod
+    def parse_args(cls, parser):
+        parser.add_argument(
+            'source',
+            nargs='?',
+            help='File copy source'
+        )
+        parser.add_argument(
+            'target',
+            nargs='?',
+            help='File copy target'
+        )
+
+    async def __call__(self, entry):
+        source = self.source.format(entry=entry)
+        target = self.target.format(entry=entry)
+        async with asyncssh.connect(entry, known_hosts=None) as conn:
+            if self.source.startswith('{entry}:'):
+                source = (conn, source.split(':', 1)[1])
+            if self.target.startswith('{entry}:'):
+                target = (conn, target.split(':', 1)[1])
+            await asyncssh.scp(source, target)
+        return {
+            'success': True,
+            'source': self.source.format(entry=entry),
+            'target': self.target.format(entry=entry),
+        }
+
+class SSHHandler():
+    def __init__(self, command=None, continue_on_error=True):
+        self.command = command
+        self.continue_on_error = continue_on_error
+
+    @classmethod
+    def parse_args(cls, parser):
+        parser.add_argument(
+            'command',
+            nargs='?',
+            help='Command to run'
+        )
+        parser.add_argument(
+            '--continue-on-error',
+            action='store_true',
+            default=False,
+            help='Continue executing commands if non-success exit status is given',
+        )
+
+    async def __call__(self, entry):
         command_results = []
+        commands = [self.command]
         host = entry.strip()
         async with asyncssh.connect(host, known_hosts=None) as conn:
-            for command in command_list:
+            for command in commands:
                 result = await conn.run(command)
                 command_results.append({
                     'host': entry,
@@ -37,11 +85,11 @@ class SSHHandler():
                     'stdout': result.stdout,
                     'stderr': result.stderr,
                 })
-                if result.exit_status != 0 and self.quit_on_error:
+                if result.exit_status != 0 and not self.continue_on_error:
                     break
 
         success = all([r['exit_code'] == 0 for r in command_results])
-        if len(command_list) == 1:
+        if len(commands) == 1:
             return { 'success': success, **command_results[0] }
         return {
             'success': success,
@@ -133,7 +181,11 @@ class Nexus():
 
     def _output_entry(self, result_entry):
         entry, result = result_entry
-        output_entry = str(result) + '\n'
+        if isinstance(result, (dict, list)):
+            output_entry = json.dumps(result)
+        else:
+            output_entry = str(result)
+        output_entry = output_entry + '\n'
         if self.show_headers:
             output_entry = f'{entry}: {output_entry}'
         self.target.write(output_entry)
@@ -159,13 +211,14 @@ class Nexus():
             self.queue.task_done()
             self.active_count -= 1
 
+HANDLERS = {
+    'test': test_handler,
+    'ssh': SSHHandler,
+    'scp': ScpHandler,
+}
+
 def crank_command():
     cmd_parser = argparse.ArgumentParser(prog='crank')
-    cmd_parser.add_argument(
-        'command',
-        nargs=1,
-        help='Command to run'
-    )
     cmd_parser.add_argument('--input', help='Set source (Default stdin)', default='-')
     cmd_parser.add_argument('--output', help='Set target of output (Default stdout)', default='-')
     cmd_parser.add_argument(
@@ -177,7 +230,7 @@ def crank_command():
     cmd_parser.add_argument(
         '-m', '--module',
         help='Operational Module',
-        choices=['test', 'ssh'],
+        choices=HANDLERS.keys(),
         default='ssh',
     )
     cmd_parser.add_argument(
@@ -198,15 +251,19 @@ def crank_command():
         help='Output progress bar and dont display results until the end',
         default=False,
     )
-    args = cmd_parser.parse_args()
+    args, extra_args = cmd_parser.parse_known_args()
     source = _get_file_io(args.input)
     target = _get_file_io(args.output, write=True)
 
-    HANDLERS = {
-        'test': test_handler,
-        'ssh': SSHHandler(args.command[0]).handle,
-    }
-    handler = HANDLERS.get(args.module)
+    Handler = HANDLERS.get(args.module)
+
+    handler_parser = argparse.ArgumentParser()
+    if hasattr(Handler, 'parse_args'):
+        Handler.parse_args(handler_parser)
+        handler_args = handler_parser.parse_args(extra_args)
+        handler = Handler(**handler_args.__dict__)
+    else:
+        handler = Handler
 
     try:
         nexus = Nexus(
