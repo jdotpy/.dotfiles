@@ -38,7 +38,7 @@ class ScpHandler():
             help='File copy target'
         )
 
-    async def __call__(self, entry):
+    async def handle(self, entry):
         source = self.source.format(entry=entry)
         target = self.target.format(entry=entry)
         async with asyncssh.connect(entry, known_hosts=None) as conn:
@@ -72,7 +72,7 @@ class HTTPHandler():
             help='HTTP Method to use (GET/POST, etc)'
         )
 
-    def __call__(self, entry):
+    def handle(self, entry):
         url = self.url.format(entry=entry)
         response = requests.request(self.method, url)
         print(response.text)
@@ -116,7 +116,7 @@ class SSHHandler():
             help='Sudo as user'
         )
 
-    async def __call__(self, entry):
+    async def handle(self, entry):
         command_results = []
         commands = [self.command]
         host = entry.strip()
@@ -162,6 +162,7 @@ class Nexus():
         self.source = source
         self.target = target
         self.loop = asyncio.get_event_loop()
+        # Support class handlers or just plain functions
         self.handler = handler
         self.queue = asyncio.Queue(loop=self.loop)
         self.show_progress = show_progress and not stream_output
@@ -315,7 +316,7 @@ def crank_command():
     if hasattr(Handler, 'parse_args'):
         Handler.parse_args(handler_parser)
         handler_args = handler_parser.parse_args(extra_args)
-        handler = Handler(**handler_args.__dict__)
+        handler = Handler(**handler_args.__dict__).handle
     else:
         handler = Handler
 
