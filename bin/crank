@@ -2,6 +2,7 @@
 
 import asyncssh
 import argparse
+import requests
 import asyncio
 import logging
 import random
@@ -51,6 +52,31 @@ class ScpHandler():
             'source': self.source.format(entry=entry),
             'target': self.target.format(entry=entry),
         }
+
+class HTTPHandler():
+    def __init__(self, url=None, method=None):
+        self.url = url
+        self.method = method
+
+    @classmethod
+    def parse_args(cls, parser):
+        parser.add_argument(
+            'url',
+            nargs='?',
+            default='http://{entry}',
+            help='URL of resource (defaults to http://{entry})'
+        )
+        parser.add_argument(
+            '-m', '--method',
+            default='GET',
+            help='HTTP Method to use (GET/POST, etc)'
+        )
+
+    def __call__(self, entry):
+        url = self.url.format(entry=entry)
+        response = requests.request(self.method, url)
+        print(response.text)
+        return response.text
 
 class SSHHandler():
     NO_SUDO = object()
@@ -167,7 +193,6 @@ class Nexus():
              # Finish with a newline
              print('')
 
-
     def run(self):
         self.loop.run_until_complete(self._execute_jobs())
 
@@ -222,7 +247,14 @@ class Nexus():
                     continue
             self.active_count += 1
             try:
-                result = await self.handler(entry)
+                if asyncio.iscoroutinefunction(self.handler):
+                    result = await self.handler(entry)
+                else:
+                    print('starting to run in executor')
+                    def handler_wrapper():
+                        return self.handler(entry)
+                    result = await self.loop.run_in_executor(None, handler_wrapper)
+                    print('done running in executor')
             except Exception as e:
                 result = e
             result_entry = (entry, result)
@@ -233,6 +265,7 @@ class Nexus():
             self.active_count -= 1
 
 HANDLERS = {
+    'http': HTTPHandler,
     'test': test_handler,
     'ssh': SSHHandler,
     'scp': ScpHandler,
