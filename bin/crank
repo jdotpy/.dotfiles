@@ -53,9 +53,21 @@ class ScpHandler():
         }
 
 class SSHHandler():
-    def __init__(self, command=None, continue_on_error=True):
+    NO_SUDO = object()
+
+    def __init__(self, command=None, continue_on_error=True, as_user=None):
         self.command = command
         self.continue_on_error = continue_on_error
+
+        # Hackery around argparse's "empty" value being None for present arg
+        # while the actual missing arg takes on the default defined in the 
+        # `add_argument` function
+        if as_user == self.NO_SUDO:
+            self.as_user = None
+        elif not as_user:
+            self.as_user = 'root'
+        else:
+            self.as_user = as_user
 
     @classmethod
     def parse_args(cls, parser):
@@ -70,6 +82,13 @@ class SSHHandler():
             default=False,
             help='Continue executing commands if non-success exit status is given',
         )
+        parser.add_argument(
+            '--sudo',
+            nargs='?',
+            default=cls.NO_SUDO,
+            dest='as_user',
+            help='Sudo as user'
+        )
 
     async def __call__(self, entry):
         command_results = []
@@ -77,6 +96,8 @@ class SSHHandler():
         host = entry.strip()
         async with asyncssh.connect(host, known_hosts=None) as conn:
             for command in commands:
+                if self.as_user:
+                    command = 'sudo -u {} {}'.format(self.as_user, command)
                 result = await conn.run(command)
                 command_results.append({
                     'host': entry,
