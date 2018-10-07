@@ -9,11 +9,24 @@ from importlib import import_module
 import random
 import json
 import sys
+import os
 
 logger = logging.getLogger(__file__)
 
+def _extract(data, path=None):
+    if not path:
+        return data
+    result = data
+    for attr in path.split('.'):
+        if isinstance(result, dict):
+            result = result.get(attr, None)
+        else:
+            result = getattr(result, attr, None)
+    return result
+
 
 def _load_handler(path):
+    sys.path.append(os.path.abspath('.'))
     module_path, handler_name = path.rsplit('.', 1)
     module = import_module(module_path)
     for attr in module_path.split('.')[1:]:
@@ -167,9 +180,20 @@ class Nexus():
     """
     DEFAULT_WORKERS = 5
 
-    def __init__(self, source, target, handler, stream_output=False, show_headers=False, show_progress=True, workers=DEFAULT_WORKERS):
+    def __init__(
+                self,
+                source,
+                target,
+                handler,
+                stream_output=False,
+                show_headers=False,
+                show_progress=True,
+                extract=None,
+                workers=DEFAULT_WORKERS
+            ):
         self.source = source
         self.target = target
+        self.extract = extract
         self.loop = asyncio.get_event_loop()
         # Support class handlers or just plain functions
         self.handler = handler
@@ -237,6 +261,9 @@ class Nexus():
 
     def _output_entry(self, result_entry):
         entry, result = result_entry
+        if self.extract:
+            result = _extract(result, self.extract)
+
         if isinstance(result, (dict, list)):
             output_entry = json.dumps(result)
         else:
@@ -314,6 +341,11 @@ def crank_command():
         help='Output progress bar and dont display results until the end',
         default=False,
     )
+    cmd_parser.add_argument(
+        '-e', '--extract',
+        help='Extract a part of the result by dot path (e.g. result.foobar)',
+        default=None,
+    )
     args, extra_args = cmd_parser.parse_known_args()
     source = _get_file_io(args.input)
     target = _get_file_io(args.output, write=True)
@@ -338,6 +370,7 @@ def crank_command():
             handler,
             show_headers=args.headers,
             stream_output=not args.progress,
+            extract=args.extract,
             workers=args.workers
         )
         nexus.run()
