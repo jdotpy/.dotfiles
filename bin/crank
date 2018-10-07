@@ -5,12 +5,21 @@ import argparse
 import requests
 import asyncio
 import logging
+from importlib import import_module
 import random
 import json
 import sys
 
 logger = logging.getLogger(__file__)
 
+
+def _load_handler(path):
+    module_path, handler_name = path.rsplit('.', 1)
+    module = import_module(module_path)
+    for attr in module_path.split('.')[1:]:
+        module = getattr(module, attr)
+    handler_obj = getattr(module, handler_name)
+    return handler_obj
 
 def _get_file_io(name, write=False):
     if name == '-' and write:
@@ -285,7 +294,6 @@ def crank_command():
     cmd_parser.add_argument(
         '-m', '--module',
         help='Operational Module',
-        choices=HANDLERS.keys(),
         default='ssh',
     )
     cmd_parser.add_argument(
@@ -310,7 +318,10 @@ def crank_command():
     source = _get_file_io(args.input)
     target = _get_file_io(args.output, write=True)
 
-    Handler = HANDLERS.get(args.module)
+    if '.' in args.module:
+        Handler = _load_handler(args.module)
+    else:
+        Handler = HANDLERS.get(args.module)
 
     handler_parser = argparse.ArgumentParser()
     if hasattr(Handler, 'parse_args'):
