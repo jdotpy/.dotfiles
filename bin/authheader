@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+
+from getpass import getpass
+import base64
+import sys
+
+def encode_creds(user=None, password=None):
+    if not user:
+        user = input('Username: ')
+    if not password:
+        password = getpass('Password: ')
+
+    combined_bytes = '{}:{}'.format(user, password).encode('utf-8')
+    encoded = base64.b64encode(combined_bytes)
+    return encoded
+
+
+if __name__ == '__main__':
+    user, pw = None, None
+    if len(sys.argv) == 3:
+        user, pw = sys.argv[1:3]
+    print(encode_creds(user, pw).decode('utf-8'))
+
