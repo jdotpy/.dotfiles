@@ -98,8 +98,15 @@ class HTTPHandler():
     def handle(self, entry):
         url = self.url.format(entry=entry)
         response = requests.request(self.method, url)
-        print(response.text)
-        return response.text
+        result = {
+            'headers': dict(response.headers),
+            'code': response.status_code,
+        }
+        if response.headers.get('content-type', None) == 'application/json':
+            result['response'] = response.json()
+        else:
+            result['response'] = response.text
+        return result
 
 class SSHHandler():
     NO_SUDO = object()
