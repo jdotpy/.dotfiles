@@ -8,21 +8,61 @@ import logging
 from importlib import import_module
 import traceback
 import random
+import shlex
 import json
 import sys
+import re
 import os
 
 logger = logging.getLogger(__file__)
 
-def _extract(data, path=None):
-    if not path:
-        return data
+INDEX_ATTR_PATTERN = r'(\[\*\])|(\[\d\])'
+class IndexSelector:
+    def __init__(self, index):
+        self.index = index
+
+    def __str__(self):
+        return 'IndexSelector({})'.format(self.index)
+
+def _truthy(entries):
+    return [entry for entry in entries if entry]
+
+def parse_selectors(path):
+    if path is None:
+        return []
+    selectors = []
+    dotted_chunks = path.split('.')
+    for section in dotted_chunks:
+        chunks = _truthy(re.split(INDEX_ATTR_PATTERN, section))
+        for chunk in chunks:
+            if chunk.startswith('[') and chunk.endswith(']'):
+                selectors.append(IndexSelector(chunk[1:-1]))
+            else:
+                selectors.append(chunk)
+    return selectors
+
+def extract_path(data, path=None):
+    if isinstance(path, list):
+        selectors = path
+    else:
+        selectors = parse_selectors(path)
+
+
     result = data
-    for attr in path.split('.'):
-        if isinstance(result, dict):
-            result = result.get(attr, None)
+    for i, selector in enumerate(selectors):
+        if isinstance(selector, IndexSelector):
+            if selector.index == '*':
+                return [extract_path(entry, selectors[i + 1:]) for entry in result]
+            else:
+                try:
+                    result = result[int(selector.index)]
+                except IndexError as e:
+                    result = None
         else:
-            result = getattr(result, attr, None)
+            if isinstance(result, dict):
+                result = result.get(selector, None)
+            else:
+                result = getattr(result, selector, None)
     return result
 
 
@@ -107,6 +147,33 @@ class HTTPHandler():
         else:
             result['response'] = response.text
         return result
+
+class ShellHandler():
+    def __init__(self, command=None):
+        self.command = command
+
+    @classmethod
+    def parse_args(cls, parser):
+        parser.add_argument(
+            'command',
+            nargs='?',
+            default='echo "{entry}"',
+            help='Subprocess command to run'
+        )
+
+    async def handle(self, entry):
+        command = self.command.format(entry=shlex.quote(entry))
+        subprocess = await asyncio.create_subprocess_shell(
+            command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await subprocess.communicate()
+        return {
+            'stdout': stdout.decode('utf-8'),
+            'stderr': stderr.decode('utf-8'),
+            'exit_code': subprocess.returncode,
+        }
 
 class SSHHandler():
     NO_SUDO = object()
@@ -272,7 +339,7 @@ class Nexus():
     def _output_entry(self, result_entry):
         entry, result = result_entry
         if self.extract:
-            result = _extract(result, self.extract)
+            result = extract_path(result, self.extract)
 
         if isinstance(result, (dict, list)):
             output_entry = json.dumps(result)
@@ -317,6 +384,7 @@ HANDLERS = {
     'test': test_handler,
     'ssh': SSHHandler,
     'scp': ScpHandler,
+    'shell': ShellHandler,
 }
 
 def crank_command():
