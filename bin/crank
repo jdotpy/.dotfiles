@@ -65,7 +65,6 @@ def extract_path(data, path=None):
                 result = getattr(result, selector, None)
     return result
 
-
 def _load_handler(path):
     sys.path.append(os.path.abspath('.'))
     module_path, handler_name = path.rsplit('.', 1)
