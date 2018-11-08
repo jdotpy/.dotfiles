@@ -58,6 +58,9 @@ def extract_path(data, path=None):
                     result = result[int(selector.index)]
                 except IndexError as e:
                     result = None
+        elif selector == '*':
+            values = result.values()
+            return [extract_path(value, selectors[i + 1:]) for value in values]
         else:
             if isinstance(result, dict):
                 result = result.get(selector, None)
@@ -82,10 +85,16 @@ def _get_file_io(name, write=False):
     else:
         return open(name, 'w' if write else 'r')
 
+async def _get_client_keys():
+    client = await asyncssh.connect_agent()
+    keys = await client.get_keys()
+    return keys
+
 class ScpHandler():
     def __init__(self, source=None, target=None):
         self.source = source
         self.target = target
+        self.client_keys = None
 
     @classmethod
     def parse_args(cls, parser):
@@ -101,9 +110,12 @@ class ScpHandler():
         )
 
     async def handle(self, entry):
+        if not self.client_keys:
+            self.client_keys = await _get_client_keys()
+
         source = self.source.format(entry=entry)
         target = self.target.format(entry=entry)
-        async with asyncssh.connect(entry, known_hosts=None) as conn:
+        async with asyncssh.connect(entry, known_hosts=None, client_keys=self.client_keys) as conn:
             if self.source.startswith('{entry}:'):
                 source = (conn, source.split(':', 1)[1])
             if self.target.startswith('{entry}:'):
@@ -129,7 +141,7 @@ class HTTPHandler():
             help='URL of resource (defaults to http://{entry})'
         )
         parser.add_argument(
-            '-m', '--method',
+            '--method',
             default='GET',
             help='HTTP Method to use (GET/POST, etc)'
         )
@@ -180,6 +192,7 @@ class SSHHandler():
     def __init__(self, command=None, continue_on_error=True, as_user=None):
         self.command = command
         self.continue_on_error = continue_on_error
+        self.client_keys = None
 
         # Hackery around argparse's "empty" value being None for present arg
         # while the actual missing arg takes on the default defined in the 
@@ -213,10 +226,13 @@ class SSHHandler():
         )
 
     async def handle(self, entry):
+        if not self.client_keys:
+            self.client_keys = await _get_client_keys()
+
         command_results = []
         commands = [self.command]
         host = entry.strip()
-        async with asyncssh.connect(host, known_hosts=None) as conn:
+        async with asyncssh.connect(host, known_hosts=None, client_keys=self.client_keys) as conn:
             for command in commands:
                 if self.as_user:
                     command = 'sudo -u {} {}'.format(self.as_user, command)

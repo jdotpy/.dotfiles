@@ -19,3 +19,5 @@ hi Folded       guifg=grey guibg=darkblue ctermfg=grey ctermbg=darkblue
 
 """ open FuzzyFinder to pattern search
 nmap <SPACE> :FufFile<CR>A**/<backspace>
+
+" Run this for xml highlighting: !xmllint --noout %
