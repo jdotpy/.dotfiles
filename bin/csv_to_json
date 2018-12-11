@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+
+import json
+import sys
+import csv
+
+def main(source, target):
+    for line in csv.DictReader(source):
+        target.write(json.dumps(line) + '\n')
+
+if __name__ == '__main__':
+    if len(sys.argv) > 1 and sys.argv[1]:
+        source = open(sys.argv[1], 'r')
+    else:
+        source = sys.stdin
+
+    main(source, sys.stdout)
+    if hasattr(source, 'close'):
+        source.close()

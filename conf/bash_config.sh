@@ -29,7 +29,7 @@ prompt() {
   ################
   # Virtual Env
   if [ -n "$VIRTUAL_ENV" ]; then
-    ps1_virtual_env=$(basename "$VIRTUAL_ENV")
+    ps1_virtual_env=$(echo "$VIRTUAL_ENV" | awk -F"/" '{print $(NF-1)"/"$NF}')
     ps1_virtual_env="($ps1_virtual_env)"
   else 
     unset ps1_virtual_env;
