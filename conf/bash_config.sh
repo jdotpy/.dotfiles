@@ -1,5 +1,6 @@
 PATH="$PATH:~/.dotfiles/bin"
 export CLICOLOR=1
+export STREAMLINE_CLOSING_NEWLINE="true"
 
 source ~/.dotfiles/conf/git-completion.bash
 
@@ -7,6 +8,8 @@ alias untarball="tar -xzf"
 alias tarball="tar -czf"
 alias ll="ls -la"
 alias pyserve="python3 -m http.server"
+alias different='diff -W $(( $(tput cols) - 2 )) -y '
+alias pyv="source .env/bin/activate"
 
 # Using my own commands
 alias findips="streamline --filter 're.match(\".*\d{1,3}\.\d{1,3}\", line)' 're.match(r\".*?(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}).*\", line).group(1)'"
