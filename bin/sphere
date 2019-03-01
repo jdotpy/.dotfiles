@@ -31,7 +31,7 @@ def _get_display_timezones():
 
 def parse_time(input_data, timezone='local'):
     try:
-        return pendulum.from_timestamp(float(input_data), tz=timezone)
+        return float(input_data)
     except Exception as e:
         # Must not be epoch time
         pass
@@ -64,5 +64,5 @@ if __name__ == '__main__':
             input_time, timezone = args
         else:
             input_time, timezone = args[0], 'local'
-        epoch_time = parse_time(input_type, timezone=timezone)
+        epoch_time = parse_time(input_time, timezone=timezone)
     display_time(epoch_time)
