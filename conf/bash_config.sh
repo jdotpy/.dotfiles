@@ -2,7 +2,7 @@ PATH="$PATH:~/.dotfiles/bin"
 export CLICOLOR=1
 export STREAMLINE_CLOSING_NEWLINE="true"
 
-source ~/.dotfiles/conf/git-completion.bash
+#source ~/.dotfiles/conf/git-completion.bash
 
 alias untarball="tar -xzf"
 alias tarball="tar -czf"

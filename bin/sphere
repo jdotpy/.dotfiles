@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+
+from datetime import datetime, timezone
+import pendulum
+import time
+import sys
+import os
+
+TS_DISPLAY_FORMAT = 'YYYY-MM-DD HH:mm:ss'
+TS_PATTERNS = [
+    'YYYY-MM-DD HH:mm:ss',
+    'YYYY-MM-DD HH:mm',
+    'YYYY-MM-DD HH',
+    'YYYY-MM-DD',
+]
+
+def _get_display_timezones():
+    env_tzs = os.environ.get('SPHERE_TIMEZONES', None)
+    if env_tzs:
+        return env_tzs.split(':')
+    return [
+        'US/Hawaii',
+        'US/Pacific',
+        'US/Eastern',
+        'UTC',
+        'Europe/Bucharest',
+        'Asia/Dubai',
+        'Asia/Hong_Kong',
+        'Japan',
+    ]
+
+def parse_time(input_data, timezone='local'):
+    try:
+        return pendulum.from_timestamp(float(input_data), tz=timezone)
+    except Exception as e:
+        # Must not be epoch time
+        pass
+
+    timestamp = None
+    for pattern in TS_PATTERNS:
+        try:
+            return pendulum.from_format(input_data, pattern, tz=timezone).timestamp()
+        except Exception as e:
+            pass
+    raise ValueError('Unable to parse timestamp: {}. Use format {}'.format(input_data, TS_PATTERNS[0]))
+
+def _formatted_time(epoch_time, tz):
+    local_time = pendulum.from_timestamp(epoch_time, tz=tz)
+    return local_time.format(TS_DISPLAY_FORMAT)
+
+def display_time(epoch_time):
+    local_time = _formatted_time(epoch_time, 'local')
+    print('Epoch Time: {}\t\tLocal time: {}'.format(epoch_time, local_time))
+    for tz in _get_display_timezones():
+        print('{}    ({})'.format(_formatted_time(epoch_time, tz), tz))
+
+if __name__ == '__main__':
+    args = sys.argv[1:]
+
+    if len(args) == 0:
+        epoch_time = datetime.now().timestamp()
+    else:
+        if len(args) == 2:
+            input_time, timezone = args
+        else:
+            input_time, timezone = args[0], 'local'
+        epoch_time = parse_time(input_type, timezone=timezone)
+    display_time(epoch_time)
