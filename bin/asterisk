@@ -1,0 +1,195 @@
+#!/usr/bin/env python3
+
+import psycopg2
+
+from getpass import getpass
+from contextlib import contextmanager
+
+import configparser
+import argparse
+import logging
+import json
+import csv
+import sys
+import os
+
+CONFIG_LOCATION = os.environ.get('ASTERISK_CONFIG', '~/.asterisk')
+CONFIG_LOCATION_ABSOLUTE = os.path.expanduser(CONFIG_LOCATION)
+
+class DBBackend():
+    CONFIG_SECRETS = {'password'}
+
+    def __init__(self, **config):
+        self.config = config
+        self.connect()
+
+    def connect(self):
+        pass
+
+class Results():
+    def __init__(self, iterable):
+        self.iterable = iterable
+
+    def __iter__(self):
+        return self.iterable
+
+class PostgresResults(Results):
+    def __init__(self, cursor):
+        self.cursor = cursor
+        self.columns = None
+        self.first_record = None
+        self.yielded_first_record = False
+        self.load_metadata()
+
+    def load_metadata(self):
+        try:
+            self.first_record = next(self.cursor)
+        except StopIteration as e:
+            return
+        self.columns = [e[0] for e in self.cursor.description]
+
+    def result_count(self):
+        return self.cursor.rowcount
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if not self.yielded_first_record:
+            if self.first_record is None:
+                raise StopIteration
+            else:
+                self.yielded_first_record = True
+                return self.first_record
+        return next(self.cursor)
+
+class PostgresBackend(DBBackend):
+    CONFIG_DEFAULTS = {
+        'user': None,
+        'password': None,
+        'host': None,
+        'port': 5432,
+        'database': None,
+        'backend': 'postgres',
+    }
+    ITER_SIZE = 50000
+
+    def connect(self):
+        import psycopg2
+        self.connection = psycopg2.connect(
+            host=self.config['host'],
+            dbname=self.config['database'],
+            user=self.config['user'],
+            password=self.config['password'],
+            port=self.config['port'],
+        )
+
+    def run_query(self, sql):
+        cursor = self.connection.cursor()
+        cursor.itersize = self.ITER_SIZE
+        cursor.execute(sql)
+        return PostgresResults(cursor)
+
+
+BACKENDS = {
+    'postgres': PostgresBackend,
+}
+
+def load_profile(profile_name):
+    profiles = {}
+    config = configparser.ConfigParser()
+    config.read(CONFIG_LOCATION_ABSOLUTE)
+
+    config_section = config[profile_name]
+    backend = config_section.get('backend', None)
+    if not backend:
+        raise ValueError('Incomplete config, missing option "backend"')
+    if backend not in BACKENDS:
+        raise ValueError('Invalid backend option "{}"'.format(backend))
+    Backend = BACKENDS.get(backend)
+
+    profile = {}
+    for prop in Backend.CONFIG_DEFAULTS:
+        capture = getpass if prop in Backend.CONFIG_SECRETS else input
+        if prop not in config_section:
+            profile[prop] = capture('Enter {} for profile {}:'.format(prop, profile_name))
+        else:
+            profile[prop] = config_section[prop]
+    return profile
+
+def get_backend(profile_name):
+    profile = load_profile(profile_name)
+    Backend = BACKENDS.get(profile.pop('backend'))
+    backend = Backend(**profile)
+    return backend
+
+@contextmanager
+def output_handler(target):
+    if target == '-':
+        fd = sys.stdout
+    else:
+        fd = open(target, 'w')
+    try:
+        yield fd
+    finally:
+        if hasattr(fd, 'close'):
+            fd.close()
+
+def get_input(target):
+    if target == '-':
+        return sys.stdin.read()
+    else:
+        with open(target, 'r') as f:
+            return f.read()
+
+def format_results(results, output_target, output_format):
+    with output_handler(output_target) as output:
+        if output_format == 'csv':
+            csv_writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)
+
+            if results.columns is None:
+                output.write('\n')
+                return
+
+            csv_writer.writerow(results.columns)
+            for record in results:
+                csv_writer.writerow(record)
+        elif output_format == 'json_rows':
+            for record in results:
+                record_formatted = json.dumps(dict(zip(results.columns, record)))
+                output.write(record_formatted + '\n')
+        elif output_format == 'json':
+            output.write('[\n')
+            first = True
+            for record in results:
+                record_formatted = json.dumps(dict(zip(results.columns, record)))
+                if not first:
+                    record_formatted = ',\n' + record_formatted
+                else:
+                    first = False
+                output.write( record_formatted)
+            output.write('\n]')
+        else:
+            print('invalid format:', output_format)
+
+
+def cli():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('profile', help='Asterisk profile (from "{}")'.format(CONFIG_LOCATION_ABSOLUTE))
+    parser.add_argument('query', default='-', help='SQL query or file of query to run')
+    parser.add_argument('-f', '--format', choices=['csv', 'json_rows', 'json'], default='csv', help='Output format')
+    parser.add_argument('-o', '--output', default='-', help='Output file (- for stdout)')
+    args = parser.parse_args()
+
+    backend = get_backend(args.profile)
+    if os.path.exists(args.query) or args.query == '-':
+        sql = get_input(args.query)
+    else:
+        sql = args.query
+    results = backend.run_query(sql)
+    format_results(results, args.output, args.format)
+
+
+if __name__ == '__main__':
+    cli()
+
