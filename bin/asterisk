@@ -3,6 +3,7 @@
 import psycopg2
 
 from getpass import getpass
+from datetime import datetime
 from contextlib import contextmanager
 
 import configparser
@@ -13,17 +14,48 @@ import csv
 import sys
 import os
 
+
+class ForceJsonEncoder(json.JSONEncoder):
+    def default(self, obj):
+        # Force JSON encoding of all object types by falling back to str
+        try:
+            return json.JSONEncoder.default(self, obj)
+        except TypeError:
+            return str(obj)
+
+
 CONFIG_LOCATION = os.environ.get('ASTERISK_CONFIG', '~/.asterisk')
 CONFIG_LOCATION_ABSOLUTE = os.path.expanduser(CONFIG_LOCATION)
 
 class DBBackend():
+    BACKEND_NAME = None
     CONFIG_SECRETS = {'password'}
 
-    def __init__(self, **config):
+    def __init__(self, name, **config):
+        self.name = name
         self.config = config
+
+    def __str__(self):
+        return '[{}] {}: {}'.format(
+            self.BACKEND_NAME,
+            self.name,
+            json.dumps(self._public_config(), indent=4)
+        )
+
+    def __enter__(self):
         self.connect()
+        return self
+
+    def __exit__(self, *exc_info):
+        self.disconnect()
+
+    def _public_config(self):
+        return {key: value for key, value in self.config.items() if key not in self.CONFIG_SECRETS}
 
     def connect(self):
+        pass
+
+    def disconnect(self):
         pass
 
 class Results():
@@ -64,6 +96,7 @@ class PostgresResults(Results):
         return next(self.cursor)
 
 class PostgresBackend(DBBackend):
+    BACKEND_NAME = 'postgres'
     CONFIG_DEFAULTS = {
         'user': None,
         'password': None,
@@ -92,8 +125,16 @@ class PostgresBackend(DBBackend):
 
 
 BACKENDS = {
-    'postgres': PostgresBackend,
+    PostgresBackend.BACKEND_NAME: PostgresBackend,
 }
+
+def get_profiles():
+    profiles = {}
+    config = configparser.ConfigParser()
+    config.read(CONFIG_LOCATION_ABSOLUTE)
+    for section in config.sections():
+        profiles[section] = get_backend(section)
+    return profiles
 
 def load_profile(profile_name):
     profiles = {}
@@ -120,7 +161,7 @@ def load_profile(profile_name):
 def get_backend(profile_name):
     profile = load_profile(profile_name)
     Backend = BACKENDS.get(profile.pop('backend'))
-    backend = Backend(**profile)
+    backend = Backend(profile_name, **profile)
     return backend
 
 @contextmanager
@@ -156,13 +197,13 @@ def format_results(results, output_target, output_format):
                 csv_writer.writerow(record)
         elif output_format == 'json_rows':
             for record in results:
-                record_formatted = json.dumps(dict(zip(results.columns, record)))
+                record_formatted = json.dumps(dict(zip(results.columns, record)), cls=ForceJsonEncoder)
                 output.write(record_formatted + '\n')
         elif output_format == 'json':
             output.write('[\n')
             first = True
             for record in results:
-                record_formatted = json.dumps(dict(zip(results.columns, record)))
+                record_formatted = json.dumps(dict(zip(results.columns, record)), cls=ForceJsonEncoder)
                 if not first:
                     record_formatted = ',\n' + record_formatted
                 else:
@@ -172,21 +213,32 @@ def format_results(results, output_target, output_format):
         else:
             print('invalid format:', output_format)
 
+def show_help(parser, args):
+    parser.print_help()
+    print('\n\n== Profiles ==')
+    for profile, backend in get_profiles().items():
+        print('')
+        print(backend)
+
 
 def cli():
     parser = argparse.ArgumentParser()
     parser.add_argument('profile', help='Asterisk profile (from "{}")'.format(CONFIG_LOCATION_ABSOLUTE))
-    parser.add_argument('query', default='-', help='SQL query or file of query to run')
+    parser.add_argument('query', nargs='?', default='-', help='SQL query or file of query to run')
     parser.add_argument('-f', '--format', choices=['csv', 'json_rows', 'json'], default='csv', help='Output format')
     parser.add_argument('-o', '--output', default='-', help='Output file (- for stdout)')
     args = parser.parse_args()
+
+    if args.profile == 'help':
+        return show_help(parser, args)
 
     backend = get_backend(args.profile)
     if os.path.exists(args.query) or args.query == '-':
         sql = get_input(args.query)
     else:
         sql = args.query
-    results = backend.run_query(sql)
+    with backend:
+        results = backend.run_query(sql)
     format_results(results, args.output, args.format)
 
 
