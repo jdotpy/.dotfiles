@@ -16,7 +16,16 @@ def cli():
     parser.add_argument('-n', '--non-empty', action='store_true', default=False, help='non-empty values only')
     parser.add_argument('-s', '--strip', action='store_true', default=False, help='strip surrounding whitespace')
     parser.add_argument('-f', '--filter', action='store_true', default=False, help='strip and filter to non-empty')
-    parser.add_argument('-o', '--operation', choices=['-', '+'], default='+', help='Operation to perform on the sets\n - Subtract sets 1...N from set 0\n + Add sets 0...N\n')
+    parser.add_argument('-o', '--operation',
+        choices=['-', '+', 'x'],
+        default='+',
+        help="""
+            Operation to perform on the sets
+            [-] Subtract sets 1...N from set 0
+            [+] Get the union of sets 0...N
+            [x] Get the intersection of sets 0...N
+        """
+    )
     args = parser.parse_args()
 
     sets = []
@@ -32,11 +41,13 @@ def cli():
 
     if args.operation == '-':
         result = sets[0]
-        for other in sets[1:]:
-            result = result - other
+        result.difference_update(*sets[1:])
     elif args.operation == '+':
         result = sets[0]
         result.update(*sets[1:])
+    elif args.operation == 'x':
+        result = sets[0]
+        result.intersection_update(*sets[1:])
 
     sorted_result = sorted(list(result))
     print('\n'.join(sorted_result))
