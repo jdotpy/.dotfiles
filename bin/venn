@@ -17,7 +17,7 @@ def cli():
     parser.add_argument('-s', '--strip', action='store_true', default=False, help='strip surrounding whitespace')
     parser.add_argument('-f', '--filter', action='store_true', default=False, help='strip and filter to non-empty')
     parser.add_argument('-o', '--operation',
-        choices=['-', '+', 'x', 'd'],
+        choices=['+', '-', 'x', 'd'],
         default='+',
         help="""
             Operation to perform on the sets
