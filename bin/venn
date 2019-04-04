@@ -17,13 +17,14 @@ def cli():
     parser.add_argument('-s', '--strip', action='store_true', default=False, help='strip surrounding whitespace')
     parser.add_argument('-f', '--filter', action='store_true', default=False, help='strip and filter to non-empty')
     parser.add_argument('-o', '--operation',
-        choices=['-', '+', 'x'],
+        choices=['-', '+', 'x', 'd'],
         default='+',
         help="""
             Operation to perform on the sets
             [-] Subtract sets 1...N from set 0
             [+] Get the union of sets 0...N
             [x] Get the intersection of sets 0...N
+            [d] Symmetric difference (disjunctive union). Elements from all sets which are not in any others.
         """
     )
     args = parser.parse_args()
@@ -48,6 +49,13 @@ def cli():
     elif args.operation == 'x':
         result = sets[0]
         result.intersection_update(*sets[1:])
+    elif args.operation == 'd':
+        result = set()
+        for index, primary in enumerate(sets):
+            others = sets[0:index] + sets[index + 1:]
+            difference = primary.copy()
+            difference.difference_update(*others)
+            result.update(difference)
 
     sorted_result = sorted(list(result))
     print('\n'.join(sorted_result))
