@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+
+import asyncssh
+import asyncio
+import argparse
+import re
+import sys
+
+def _parse_hosts():
+    host_list = sys.stdin.readlines()
+    hosts = set()
+    for line in host_list:
+        items = re.split('[|, ]', line)
+        filtered_items = [i.strip().lower() for i in items if i.strip()]
+        hosts.update(filtered_items)
+    return list(hosts)
+
+
+class Host():
+    connection_options = {
+        'known_hosts': None,
+        'keepalive_interval': 30,
+        'keepalive_count_max': sys.maxsize,
+    }
+
+    def __init__(self, name):
+        self.name = name
+        self.connection = None
+        self.errors = []
+
+    async def connect(self):
+        try:
+            self.connection = await asyncssh.connect(self.name, **self.connection_options)
+        except Exception as e:
+            self.errors.append(e)
+            return False
+        return True
+
+    def is_connected(self):
+        return self.connection is not None
+
+class Progress():
+    def __init__(self, entry_count):
+        self.entry_count = entry_count
+        self.completed_count = 0
+        self.start_time = None
+        self.end_time = None
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, *args, **kwargs):
+        self.end()
+
+    def start(self):
+        self.completed_count = 0
+        self.started = time.time()
+
+    def mark_complete(self, count=1):
+        self.completed_count += count
+
+    def end(self):
+        self.completed_count = self.entry_count
+        self.end_time
+
+    def complete_percent(self):
+        return (self.completed_count / self.entry_count) * 100
+
+    def eta(self):
+        if self.completed_count == 0:
+            return 0
+        remaining = self.entry_count - self.completed_count
+        if remaining == 0:
+            return 0
+        avg_completion_time = self.time_elapsed() / completed_count
+        return remaining * avg_completion_time
+
+    def time_elapsed(self):
+        if not self.start_time:
+            return None
+        end = self.end_time or time.time()
+        return self.end_time - self.start_time
+
+class Pool():
+    def __init__(self, hosts):
+        self.hosts = [Host(h) for h in hosts]
+
+    async def operation(self, func, *args, **kwargs):
+        print('operation started')
+        results_by_host = {}
+        hosts_by_op = {}
+        self.progress = Progress(len(self.hosts))
+        for host in self.hosts:
+            op = getattr(host, func)(*args, **kwargs)
+            hosts_by_op[op] = host
+        for op in asyncio.as_completed(hosts_by_op):
+            host = hosts_by_op[op]
+            result = await op
+            results_by_host[host] = result
+        return results_by_host
+
+    async def connect(self):
+        print('connect started')
+        return self.operation('connect')
+            
+    async def show_progress(self, op):
+        while True:
+            done, _ = await asyncio.wait([op], timeout=2)
+            if hasattr(self, 'progress'):
+                loading_bar = ('#' * (self.progress.complete_percent())) + ((100 - self.progress.complete_percent()) * ' ')
+                message = '\r|{}| ({}/{} - {}%)'.format(
+                    loading_bar,
+                    self.num_complete,
+                    self.total,
+                    complete_perc,
+                )
+                print(message)
+            if done:
+                break
+        await task
+
+async def shell_sshock(hosts):
+    print('Loading hosts...')
+    pool = Pool(hosts)
+    op = pool.connect()
+    await pool.show_progress(op)
+
+    print(hosts)
+
+
+def main():
+    hosts = _parse_hosts()
+    loop = asyncio.run(shell_sshock(hosts))
+
+if __name__ == '__main__':
+    main()
