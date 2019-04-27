@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+
+import ipaddress
+import sys
+
+def cidr_match(ip, ip_range):
+    address_number = int(ipaddress.ip_address(ip))
+    network = ipaddress.ip_network(ip_range)
+    network_address = int(network.network_address)
+    network_mask = int(network.netmask)
+    in_network = (address_number & network_mask) ==  network_address
+    return in_network
+
+def cidr_match_builtin(ip, ip_range):
+    return ipaddress.ip_address(ip) in ipaddress.ip_network(ip_range)
+
+if __name__ == '__main__':
+    arg1, arg2 = sys.argv[1:3]
+    if '/' in arg1:
+        network = arg1
+        ip = arg2
+    else:
+        network = arg2
+        ip = arg1
+    result = cidr_match_builtin(ip, network)
+    print('is {ip} in {network}? {result}'.format(
+        ip=ip,
+        network=network,
+        result=result,
+    ))
