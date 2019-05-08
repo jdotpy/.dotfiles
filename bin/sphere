@@ -6,8 +6,19 @@ import time
 import sys
 import os
 
-TS_DISPLAY_FORMAT = 'YYYY-MM-DD HH:mm:ss'
+TS_DISPLAY_FORMAT = 'YYYY-MM-DD HH:mm:ss.SSSSSS'
 TS_PATTERNS = [
+    'YYYY-MM-DD HH:mm:ss.SSS Z',
+    'YYYY-MM-DD HH:mm:ss.SSS zz',
+    'YYYY-MM-DD HH:mm:ss.SSS z',
+    'YYYY-MM-DD HH:mm:ss.SSS',
+    'YYYY-MM-DD HH:mm:ss.SSSSSS z',
+    'YYYY-MM-DD HH:mm:ss.SSSSSS zz',
+    'YYYY-MM-DD HH:mm:ss.SSSSSS Z',
+    'YYYY-MM-DD HH:mm:ss.SSSSSS',
+    'YYYY-MM-DD HH:mm:ss z',
+    'YYYY-MM-DD HH:mm:ss Z',
+    'YYYY-MM-DD HH:mm:ss zz',
     'YYYY-MM-DD HH:mm:ss',
     'YYYY-MM-DD HH:mm',
     'YYYY-MM-DD HH',
@@ -29,17 +40,21 @@ def _get_display_timezones():
         'Japan',
     ]
 
-def parse_time(input_data, timezone='local'):
+def parse_time(input_data, timezone=None):
     try:
         return float(input_data)
     except Exception as e:
         # Must not be epoch time
         pass
 
+    if timezone:
+        tz = pendulum.timezone(timezone)
+    else:
+        tz = None
     timestamp = None
     for pattern in TS_PATTERNS:
         try:
-            return pendulum.from_format(input_data, pattern, tz=timezone).timestamp()
+            return pendulum.from_format(input_data, pattern, tz=tz).timestamp()
         except Exception as e:
             pass
     raise ValueError('Unable to parse timestamp: {}. Use format {}'.format(input_data, TS_PATTERNS[0]))
@@ -50,7 +65,7 @@ def _formatted_time(epoch_time, tz):
 
 def display_time(epoch_time):
     local_time = _formatted_time(epoch_time, 'local')
-    print('Epoch Time: {}\t\tLocal time: {}'.format(epoch_time, local_time))
+    print('Epoch Time: {}\nLocal time: {}\n'.format(epoch_time, local_time))
     for tz in _get_display_timezones():
         print('{}    ({})'.format(_formatted_time(epoch_time, tz), tz))
 
@@ -63,6 +78,6 @@ if __name__ == '__main__':
         if len(args) == 2:
             input_time, timezone = args
         else:
-            input_time, timezone = args[0], 'local'
+            input_time, timezone = args[0], None
         epoch_time = parse_time(input_time, timezone=timezone)
     display_time(epoch_time)

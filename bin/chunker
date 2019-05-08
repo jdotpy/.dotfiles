@@ -1,0 +1,45 @@
+#!/usr/bin/python3
+
+import argparse
+import sys
+
+
+def get_chunks(start, end=None, chunk_count=None, chunk_size=None):
+    if start and end and chunk_count:
+        if (end - start) / chunk_count == 0:
+            chunk_size = (end - start) / chunk_count
+        else:
+            chunk_size = int((end - start) / chunk_count) + 1
+    elif start and end and chunk_size:
+        count = (end - start) / chunk_count
+        remainder = (end - start) - chunk_size * count
+        if remainder:
+            count += 1
+        chunk_count = count
+    elif start and chunk_size and chunk_count:
+        end = start + (chunk_size * chunk_count)
+
+    last_end = start
+    chunks = []
+    while True:
+        # Stuff
+    return chunks
+
+
+
+def cli():
+    parser = argparse.ArgumentParser(description='Chunk integer')
+    parser.add_argument('--start', type=int)
+    parser.add_argument('--end', type=int, default=None)
+    parser.add_argument('--chunk_size', default=None, help='Determine chunk size')
+    parser.add_argument('--chunk_count', default=None, help='Determine chunk size')
+
+    start, end = args.integers
+    assert start < end
+
+    get_chunks(start, end=, chunk_count=args.chunk_count, chunk_size=args.chunk_size)
+
+
+def main():
+    start, end = sys.argv[1:2]
+    diff = end - start
