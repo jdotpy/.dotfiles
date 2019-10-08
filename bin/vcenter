@@ -115,7 +115,6 @@ def main():
     profile = options.pop()
     command = options.pop()
 
-
     if command == 'auth':
         return update_profile(profile)
 
@@ -128,9 +127,17 @@ def main():
         elif options:
             params['params'] = json.loads(options.pop())
         response = client._exec(method, endpoint, **params)
+    elif command == 'vms':
+        query = {}
+        for option in options:
+            key, value = option.split('=')
+            query['filter.' + key] = value
+        params = {'params': query}
+        response = client._exec('GET', '/rest/vcenter/vm', **params)
     else:
         response = client._exec('GET', '/rest/vcenter/vm')
     format_results(response)
+
 
 if __name__ == '__main__':
     main()
