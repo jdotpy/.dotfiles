@@ -33,7 +33,7 @@ def update_profile(profile):
     user = settings.get('user', None)
     password = settings.get('password', None)
     if not host:
-        host = input('Enter host (e.g. https://vcenter.las1.dc): ')
+        host = input('Enter host (e.g. https://vcenter.foobar): ')
     if not user:
         user = input('Enter user: ')
     if not password:

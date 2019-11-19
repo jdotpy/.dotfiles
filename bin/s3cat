@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+from urllib.parse import urlparse
+
+import argparse
+import botocore
+import boto3
+import sys
+
+def download(target, profile=None):
+    if profile is None:
+        session_options = {}
+    else:
+        session_options = {'profile_name': profile}
+
+    session = boto3.Session(**session_options)
+    s3 = session.client('s3')
+
+    target_url = urlparse(target)
+    bucket, key = target_url.netloc, target_url.path.lstrip('/')
+    s3.download_fileobj(bucket, key, sys.stdout.buffer)
+
+def cli():
+    parser = argparse.ArgumentParser(prog='sm')
+    parser.add_argument('file', nargs=1, help='S3 file with protocol (e.g. s3://bucket/file.text)')
+    parser.add_argument('--profile')
+    args = parser.parse_args()
+
+    download(args.file[0], profile=args.profile)
+
+
+if __name__ == '__main__':
+    cli()
