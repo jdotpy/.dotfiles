@@ -1,5 +1,3 @@
-execute pathogen#infect()
-
 " Some random defaults
 set number
 set shiftwidth=2
@@ -17,7 +15,12 @@ hi Folded       guifg=grey guibg=darkblue ctermfg=grey ctermbg=darkblue
 
 """""""" Plugin stuff
 
-""" open FuzzyFinder to pattern search
-nmap <SPACE> :FufFile<CR>A**/<backspace>
+"" CTRLP
+set runtimepath^=~/.vim/bundle/ctrlp.vim
+nmap <SPACE> :CtrlP<CR>
+
+
+"""""""" Helpful commands
 
 " Run this for xml highlighting: !xmllint --noout %
+
