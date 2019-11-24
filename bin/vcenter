@@ -33,7 +33,7 @@ def update_profile(profile):
     user = settings.get('user', None)
     password = settings.get('password', None)
     if not host:
-        host = input('Enter host (e.g. https://vcenter.las1.dc): ')
+        host = input('Enter host (e.g. https://vcenter.foobar): ')
     if not user:
         user = input('Enter user: ')
     if not password:
@@ -103,7 +103,7 @@ def format_results(response):
         for result in results:
             print(json.dumps(result))
     else:
-        print(result)
+        print(results)
 
 
 def main():
@@ -114,7 +114,6 @@ def main():
         sys.exit(1)
     profile = options.pop()
     command = options.pop()
-
 
     if command == 'auth':
         return update_profile(profile)
@@ -128,9 +127,33 @@ def main():
         elif options:
             params['params'] = json.loads(options.pop())
         response = client._exec(method, endpoint, **params)
+        format_results(response)
+    elif command == 'vms':
+        query = {}
+        for option in options:
+            key, value = option.split('=')
+            query['filter.' + key] = value
+        params = {'params': query}
+        response = client._exec('GET', '/rest/vcenter/vm', **params)
+        format_results(response)
+    elif command == 'restart':
+        vm_name = options.pop()
+        query_response = client._exec('GET', '/rest/vcenter/vm', params={'filter.names': vm_name})
+        matching_vms = query_response.json()
+        try:
+            vm_id = matching_vms['value'][0]['vm']
+        except Exception as e:
+            print('Unable to find VM', vm_name)
+            sys.exit(1)
+        print('Restarting vm={}'.format(vm_id))
+        sureness = input('You sure?')
+        if sureness in 'yes':
+            restart_request = client._exec('POST', '/rest/vcenter/vm/{}/power/reset'.format(vm_id))
+            print(restart_request.status_code)
     else:
         response = client._exec('GET', '/rest/vcenter/vm')
-    format_results(response)
+        format_results(response)
+
 
 if __name__ == '__main__':
     main()
