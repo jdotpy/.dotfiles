@@ -18,6 +18,10 @@ hi Folded       guifg=grey guibg=darkblue ctermfg=grey ctermbg=darkblue
 "" CTRLP
 set runtimepath^=~/.vim/bundle/ctrlp.vim
 nmap <SPACE> :CtrlP<CR>
+set wildignore+=bower_modules,node_modules,.git,*.pyc     " Ignore some things for searching files
+let g:ctrlp_working_path_mode = ''           " Stop
+let g:ctrlp_match_window = 'top,order:ttb,max:20'
+let g:ctrlp_max_files = 10000
 
 
 """""""" Helpful commands
