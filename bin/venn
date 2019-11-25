@@ -17,7 +17,7 @@ def cli():
     parser.add_argument('-s', '--strip', action='store_true', default=False, help='strip surrounding whitespace')
     parser.add_argument('-f', '--filter', action='store_true', default=False, help='strip and filter to non-empty')
     parser.add_argument('-o', '--operation',
-        choices=['+', '-', 'x', 'd'],
+        choices=['+', '-', 'x', 'd', 'union', 'difference', 'intersection', 'unique'],
         default='+',
         help="""
             Operation to perform on the sets
@@ -40,22 +40,25 @@ def cli():
             lines = [l for l in lines if l]
         sets.append(set(lines))
 
-    if args.operation == '-':
+    if args.operation in ('-', 'difference'):
         result = sets[0]
         result.difference_update(*sets[1:])
-    elif args.operation == '+':
+    elif args.operation in ('+', 'union'):
         result = sets[0]
         result.update(*sets[1:])
-    elif args.operation == 'x':
+    elif args.operation in ('x', 'intersection'):
         result = sets[0]
         result.intersection_update(*sets[1:])
-    elif args.operation == 'd':
+    elif args.operation in ('d', 'unique'):
         result = set()
         for index, primary in enumerate(sets):
             others = sets[0:index] + sets[index + 1:]
             difference = primary.copy()
             difference.difference_update(*others)
             result.update(difference)
+    else:
+        print('Unsupported operation "{}"'.format(args.operation))
+
 
     sorted_result = sorted(list(result))
     print('\n'.join(sorted_result))

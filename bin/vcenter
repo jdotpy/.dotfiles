@@ -150,6 +150,18 @@ def main():
         if sureness in 'yes':
             restart_request = client._exec('POST', '/rest/vcenter/vm/{}/power/reset'.format(vm_id))
             print(restart_request.status_code)
+    elif command == 'start':
+        vm_name = options.pop()
+        query_response = client._exec('GET', '/rest/vcenter/vm', params={'filter.names': vm_name})
+        matching_vms = query_response.json()
+        try:
+            vm_id = matching_vms['value'][0]['vm']
+        except Exception as e:
+            print('Unable to find VM', vm_name)
+            sys.exit(1)
+        print('Starting vm={}'.format(vm_id))
+        restart_request = client._exec('POST', '/rest/vcenter/vm/{}/power/start'.format(vm_id))
+        print(restart_request.status_code)
     else:
         response = client._exec('GET', '/rest/vcenter/vm')
         format_results(response)
