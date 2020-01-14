@@ -1,0 +1,43 @@
+#!/usr/bin/env python3
+
+import argparse
+import socket
+import time
+import sys
+
+def wait_for_port(host, port, timeout=None):
+    started = time.time()
+    while True:
+        if timeout and (time.time() - started) > timeout:
+            return False
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(.1)
+                s.connect((host, port))
+                return True
+        except Exception as e:
+            time.sleep(.1)
+            continue
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('host', help='Host to connect to')
+    parser.add_argument('port', type=int, help='... its the port ok?')
+    parser.add_argument('-t', '--timeout', type=int, default=None, help='Timeout in seconds')
+    parser.add_argument('-v', '--verbose', action='store_true', default=False, help='Describe result')
+    args = parser.parse_args()
+
+    listening = wait_for_port(args.host, args.port, timeout=args.timeout)
+    if not listening:
+        # We timed out
+        if args.verbose:
+            print('Timeout')
+        sys.exit(2)
+    else:
+        if args.verbose:
+            print('Connected')
+
+
+if __name__ == '__main__':
+    main()
