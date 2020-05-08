@@ -103,7 +103,7 @@ def format_results(response):
         for result in results:
             print(json.dumps(result))
     else:
-        print(results)
+        print(json.dumps(results, indent=4))
 
 
 def main():

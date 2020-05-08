@@ -7,6 +7,8 @@ set foldlevel=99
 set incsearch
 set hlsearch
 
+colo delek
+
 filetype plugin indent on
 syntax on
 

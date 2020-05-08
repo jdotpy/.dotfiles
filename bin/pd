@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+import json
+import sys
+import os
+
+import requests
+
+class PDClient():
+    DEFAULT_CONFIG_LOCATION = '~/.pd.json'
+
+    def __init__(self, host=None, token=None, **conf):
+        self.host = host
+        self.token = token
+        self.config= conf
+        self.session = requests.Session()
+        self.session.headers['Authorization'] = 'Token token={}'.format(self.token)
+        self.session.headers['Content-Type'] = 'application/json'
+        self.session.headers['Accept'] = 'application/vnd.pagerduty+json;version=2'
+
+    @classmethod
+    def from_config(cls):
+        with open(os.path.expanduser(cls.DEFAULT_CONFIG_LOCATION), 'r') as f:
+            conf = json.loads(f.read())
+            return cls(host=conf.pop('host'), token=conf.pop('token'), **conf)
+
+    def send(self, method, endpoint, data=None, **options):
+        options = {}
+        if method == 'GET':
+            options['params'] = data
+        else:
+            options['data'] = data
+        response = self.session.request(method, self.host + endpoint, **options)
+        if not response.ok:
+            print(response.status_code)
+            print(response.text)
+            return None
+        return response.json()
+
+
+def get_incidents(client, *args):
+    args = list(args)
+    params = []
+    if '--team' in args:
+        args.remove('--team')
+        params.append(('team_ids[]', client.config.get('default_team', None)))
+    for arg in args:
+        params.append(arg.split('=', 1))
+
+
+    results = client.send('GET', '/incidents', data=params)
+    for result in results['incidents']:
+        print(json.dumps(result))
+
+def get_incident(client, *args):
+    if not args:
+        print('id required')
+        sys.exit(1)
+
+    results = client.send('GET', '/incidents/{}'.format(args[0]))
+    print(json.dumps(results))
+
+
+COMMANDS = {
+    'incidents': get_incidents,
+    'incident': get_incident,
+}
+
+def cli():
+    client = PDClient.from_config()
+    args = list(sys.argv[1:])
+    args.reverse()
+    if not args:
+        print('Please provide a subcommand')
+        print('. '.join(COMMANDS.keys()))
+        return
+
+    command_name = args.pop()
+    command = COMMANDS.get(command_name, None)
+    if not command:
+        print('command "{}" is not supported.'.format(command))
+        return
+
+    command(client, *args)
+
+if __name__ == '__main__':
+   cli()
