@@ -144,7 +144,6 @@ def send_data(targets, index=None, source=None, sourcetype=None, host=None, data
     try:
         for line in source:
             batch.append(client.wrap_event(line))
-            print(batch)
             if len(batch) > HEC.BATCH_SIZE:
                 client.send(batch)
                 batch = []
