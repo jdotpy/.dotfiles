@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+
+import subprocess
+import argparse
+import re
+import sys
+
+CONFIRMATION = 'Open "{}" y/n? '
+URL_PATTERN = '^https?://.*$'
+
+def get_urls(source):
+    words = []
+    for line in source.splitlines():
+        words.extend(line.split())
+
+    urls = [word for word in words if re.match(URL_PATTERN, word)]
+    return urls
+
+def open_urls(source, force=False, first=False):
+    if source == '-':
+        data = sys.stdin.read()
+    else:
+        with open(source, 'r') as f:
+            data = f.read()
+
+    urls = get_urls(data)
+    if first:
+        urls = urls[:1]
+    for url in urls:
+        if not force:
+            confirmation = input(CONFIRMATION.format(url))
+            if confirmation not in 'yes':
+                continue
+        subprocess.run(['open', url])
+
+def cli():
+    parser = argparse.ArgumentParser(prog='sm')
+    parser.add_argument('source', nargs='?', default='-', help='Source for where to find urls')
+    parser.add_argument('--first', action='store_true', default=False)
+    parser.add_argument('--force', action='store_true', default=False)
+    args = parser.parse_args()
+
+    if args.source == '-':
+        args.force = True
+
+    open_urls(args.source, force=args.force, first=args.first)
+
+
+if __name__ == '__main__':
+    cli()
