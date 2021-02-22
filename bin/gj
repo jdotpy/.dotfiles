@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+
+import curses
+import curses.ascii
+import json
+import os.path
+import os
+
+##################################################
+#                   Config                       #
+##################################################
+
+DEFAULT_CONFIG = {
+    'web': {},
+    'google': {
+        '_handler': 'browser',
+        'options': {
+            'url': 'https://www.google.com/search?q={}'
+        }
+    },
+    'dir': {},
+}
+
+
+class Config():
+    DEFAULT_LOCATION = os.path.expanduser('~/gj.json')
+
+    def __init__(self, config_data):
+        self.config_data = config_data
+
+    @classmethod
+    def from_file(cls, source=DEFAULT_LOCATION):
+        if not os.path.exists(source):
+            return cls(DEFAULT_CONFIG)
+        with open(source) as f:
+            return cls(json.loads(f.read()))
+
+    def get_context(self):
+        return self.config_data
+
+##################################################
+#                   Interface                    #
+##################################################
+
+class CLInterface():
+    def __enter__(self, *args, **kwargs):
+        print('doing the needful')
+        self.root_screen = curses.initscr()
+        curses.noecho()
+        curses.cbreak()
+        self.root_screen.keypad(True)
+        return self
+
+    def __exit__(self, *args, **kwargs):
+        self.root_screen.keypad(False)
+        curses.nocbreak()
+        curses.echo()
+        curses.endwin()
+
+    def error_alert(self):
+        curses.beep()
+
+    def wait(self):
+        return self.root_screen.getkey()
+
+    def prompt(self, text, options):
+        self.root_screen.clear()
+        self.root_screen.addstr(0, 0, text, curses.A_STANDOUT)
+        for i, option in enumerate(options):
+            self.root_screen.addstr(i + 1, 0, option)
+        self.root_screen.refresh()
+        return self.wait()
+
+    def is_key_cancel(self, key):
+        return key in (curses.ascii.ESC, 'KEY_ESCAPE', '^[', curses.KEY_EXIT)
+
+    def is_key_backspace(self, key):
+        return key in (curses.KEY_BACKSPACE, curses.ascii.BS, 'KEY_BACKSPACE')
+
+    def is_key_select(self, key):
+        return key in (curses.KEY_ENTER, 'KEY_ENTER', '\n')
+
+    def is_key_next(self, key):
+        return key in (curses.ascii.TAB, '\t', 'KEY_TAB')
+
+    def is_control_key(self, key):
+        return len(str(key)) > 1
+
+
+        
+##################################################
+#                   Logic                        #
+##################################################
+
+
+
+def lolfind(options, text):
+    s = [o for o in options if o.lower().startswith(text.lower())]
+    return s
+
+def get_selection(interface, items, allow_custom=False):
+    query = ''
+    filtered = list(items)
+    while True:
+        key = interface.prompt('>> {} '.format(query), filtered)
+        if interface.is_key_cancel(key):
+            return None
+        elif interface.is_key_select(key) or interface.is_key_next(key):
+            if len(filtered) > 0:
+                return filtered[0]
+            else:
+                interface.error_alert()
+                continue
+            return query
+        elif interface.is_key_backspace(key):
+            query = query[:-1]
+        elif interface.is_control_key(key):
+            # We don't care about keys we dont understand
+            continue
+        else:
+            query += key
+        filtered = lolfind(items, query)
+    return item
+
+def cli():
+    config = Config.from_file()
+    context = config.get_context()
+    with CLInterface() as interface:
+        match = get_selection(interface, context.keys())
+        if match in context:
+            target = context.get(match)
+    print(match)
+        
+
+if __name__ == '__main__':
+    cli()
