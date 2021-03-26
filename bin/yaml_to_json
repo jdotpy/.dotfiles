@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+
+import yaml
+import sys
+import json
+
+def main(source, target):
+    data = yaml.safe_load(source.read())
+    target.write(json.dumps(data))
+
+if __name__ == '__main__':
+    if len(sys.argv) > 1 and sys.argv[1]:
+        source = open(sys.argv[1], 'r')
+    else:
+        source = sys.stdin
+
+    main(source, sys.stdout)
+    if hasattr(source, 'close'):
+        source.close()

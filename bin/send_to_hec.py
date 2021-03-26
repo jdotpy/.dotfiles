@@ -32,7 +32,7 @@ class HEC():
         self.sessions = {host: requests.Session() for host in hosts}
         if token:
             for session in self.sessions.values():
-                session.headers['Authorization'] = 'Splunk {}'.format(token)
+                session.headers['Authorization'] = self.auth_header(token)
         self._workers = []
 
         self.worker_count = workers
@@ -40,6 +40,9 @@ class HEC():
 
         self._event_count = 0
         self._batch_count = 0
+
+    def auth_header(self, token):
+        return 'Bearer {}'.format(token)
 
     def wrap_event(self, event, host=None, timestamp=None, index=None, source=None, sourcetype=None):
         return {
@@ -57,24 +60,6 @@ class HEC():
             for host, session in host_list:
                 yield (host, session)
 
-    def create_endpoint(self):
-        hosts = self.sessions.keys()
-        for host in hosts:
-            session = self.sessions[host]
-            response = requests.post(
-                'https://{}:8089/services/data/inputs/http?output_mode=json'.format(host),
-                auth=(self.user, self.password),
-                data={'name': self.client},
-                verify=False,
-            )
-            if not response.ok:
-                self.sessions.pop(host)
-                print(response.text)
-            else:
-                result = response.json()
-                token = result['entry'][0]['content']['token']
-                session.headers['Authorization'] = 'Splunk {}'.format(token)
-
     def _send_batch(self, events):
         with self.host_lock:
             host, session = next(self.next_host)
@@ -82,7 +67,7 @@ class HEC():
         self._batch_count += 1 
         data = '\n'.join([json.dumps(event) for event in events])
         response = session.post(
-            'https://{}:8088/services/collector/event'.format(host),
+            self.ENDPOINT.format(host),
             data=data,
             verify=False,
         )
@@ -129,9 +114,46 @@ class HEC():
         for worker in self._workers:
             worker.join()
 
+class HumioHEC(HEC):
+    ENDPOINT = 'http://{}:8080/api/v1/ingest/hec'
 
-def send_data(targets, index=None, source=None, sourcetype=None, host=None, data=None, token=None):
-    client = HEC(targets, token=token, index=index, source=source, sourcetype=sourcetype)
+    def get_endpoint(self):
+        return self.ENDPOINT.format(self.host)
+
+class SplunkHEC(HEC):
+    ENDPOINT = 'https://{}:8088/services/collector/event'
+
+    def get_endpoint(self):
+        return self.ENDPOINT.format(self.host)
+
+    def auth_header(self, token):
+        return 'Splunk {}'.format(token)
+
+    def create_endpoint(self):
+        hosts = self.sessions.keys()
+        for host in hosts:
+            session = self.sessions[host]
+            response = requests.post(
+                'https://{}:8089/services/data/inputs/http?output_mode=json'.format(host),
+                auth=(self.user, self.password),
+                data={'name': self.client},
+                verify=False,
+            )
+            if not response.ok:
+                self.sessions.pop(host)
+                print(response.text)
+            else:
+                result = response.json()
+                token = result['entry'][0]['content']['token']
+                session.headers['Authorization'] = 'Splunk {}'.format(token)
+
+
+def send_data(targets, index=None, source=None, sourcetype=None, host=None, data=None, token=None, humio=False):
+    if humio:
+        Client = HumioHEC
+    else:
+        Client = SplunkHEC
+    client = Client(targets, token=token, index=index, source=source, sourcetype=sourcetype)
     client.start()
     closable = True
     if data == '-':
@@ -163,6 +185,7 @@ def cli():
     parser.add_argument('-o', '--host', help='host to assign to logs (not splunk host)', default=os.environ.get('HECLOADER_HOST', 'localhost'))
     parser.add_argument('-d', '--data', help='data to load ("-" for stdin)', default='-')
     parser.add_argument('-t', '--token', help='HEC token to use', required=not default_token, default=default_token)
+    parser.add_argument('--humio', help='Use Humio', action='store_true', default=False)
 
     args = parser.parse_args()
     params = args.__dict__
