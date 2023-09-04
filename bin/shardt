@@ -1,0 +1,160 @@
+#!/usr/bin/env python3
+
+import argparse
+import hashlib
+import math
+import csv
+import sys
+import os
+
+
+
+class ShardSet():
+    SHARD_VALUE_EMPTY = os.environ.get('SHARDT_EMPTY_VALUE', 'none')
+    SHARD_TARGET_SEPARATOR = os.environ.get('SHARD_TARGET_SEPARATOR', '_')
+
+    def __init__(self, location, name_template=None, chunks=None, size=None, hash_value=False, hash_length=12):
+        self.location = location
+        self.chunks = chunks
+        self.size = int(size)
+        self.hash_value = hash_value
+        self.hash_length = hash_length
+        self.name_template = name_template
+
+        self._targets = {}
+        self._shard_counters = {}
+
+    def _tick(self, shard_value):
+        current_value = self._shard_counters.get(shard_value, 0)
+        self._shard_counters[shard_value] = current_value + 1
+        return current_value
+
+    def _hash(self, shard_value):
+        if self.hash_value:
+            h = hashlib.sha3_256(shard_value.encode('utf-8'))
+            return h.hexdigest()[:self.hash_length]
+        else:
+            return shard_value
+
+    def _get_chunk(self, index):
+        if self.chunks:
+            return 'huh'
+        elif self.size:
+            chunk = math.floor(index / self.size)
+            start = chunk * self.size
+            end = start + self.size
+            return '{}-{}'.format(start, end)
+        return 'all'
+
+    def _get_target_label(self, shard_value, chunk_label):
+        if not self.name_template:
+            return self.SHARD_TARGET_SEPARATOR.join(['sharded', shard_value, chunk_label]) + '.csv'
+        return self.name_template.format(
+            shard=shard_value,
+            chunk=chunk_label,
+        )
+        
+    def _get_writer(self, shard_value, chunk_label):
+        key = (shard_value, chunk_label)
+        file_path = self._get_target_label(shard_value, chunk_label)
+        target = self._targets.get(key, None)
+        if target is None:
+            target_file = open(file_path, 'w')
+            writer = csv.writer(target_file)
+            target = {
+                'path': file_path,
+                'file': target_file,
+                'writer': writer,
+            }
+            self._targets[key] = target
+            return target, True
+        return target, False
+
+    def get_target(self, shard_value):
+        shard_value = self._hash(shard_value)
+
+        # Increment Counters
+        index = self._tick(shard_value)
+
+        # Determine chunk
+        chunk_label = self._get_chunk(index)
+
+        # Get writer
+        target, created = self._get_writer(shard_value, chunk_label)
+        return target['writer'], created
+
+    def close(self):
+        for target in self._targets.values():
+            target['file'].close()
+
+def generate_shard_target(source, target, has_chunks=False, has_shard_key=False):
+    if '.' in source:
+        file_name = '.'.join(source.rsplit('.', 1)[:-1])
+    else:
+        file_name = source
+    if target:
+        target = target.replace('{file}', file_name)
+        return target
+
+    target = file_name + '_sharded'
+    if has_shard_key:
+        target += '_{shard}'
+
+    if has_chunks:
+        target += '_{chunk}'
+
+    target += '.csv'
+    return target
+
+def shard_table(source, target=None, chunks=None, size=0, by=None, hash=False):
+    target = generate_shard_target(source, target, has_chunks=size or chunks, has_shard_key=by is not None)
+    shard_set = ShardSet(
+        os.getcwd(),
+        name_template=target,
+        chunks=chunks,
+        size=size,
+        hash_value=hash,
+    )
+
+    with open(source) as source_file:
+        reader = csv.reader(source_file)
+        header = reader.__next__()
+        shard_field_index = None
+        if by and by not in header:
+            print('Failed to find shard key in source file')
+            return None
+        if by is not None:
+            shard_field_index = header.index(by)
+
+        for record in reader:
+            shard_value = None
+            if by:
+                try:
+                    shard_value = record[shard_field_index]
+                except IndexError as e:
+                    shard_value = self.SHARD_VALUE_EMPTY
+
+            target, new = shard_set.get_target(shard_value)
+            if new:
+                target.writerow(header)
+            target.writerow(record)
+    shard_set.close()
+
+def cli():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('source', default='-', help='Input file (- for stdout)')
+    parser.add_argument('-t', '--target', default=None, help='Output target template (e.g. {file}_{shard}_{chunk}.csv)')
+    parser.add_argument('-c', '--chunks', default=None, help='Comma separated sizes for output files, overrides size, * for remaining')
+    parser.add_argument('-s', '--size', default=0, help='Maximum records for a file - 0 for unlimited')
+    parser.add_argument('-b', '--by', default=None, help='Shard csv by specified column')
+    parser.add_argument('-a', '--hash', default=False, action='store_true', help='Shard value gets hashed')
+    args = parser.parse_args()
+
+    options = args.__dict__
+
+    source = options.pop('source')
+    shard_table(source, **options)
+
+
+if __name__ == '__main__':
+    cli()
