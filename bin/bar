@@ -1,0 +1,151 @@
+#!/usr/bin/env python3
+
+import subprocess
+import shlex
+import argparse
+import math
+import time
+import re
+import os
+
+STYLES = {
+    'bar': {
+        'start': '╠',
+        'fill': '═',
+        'end': '╣',
+    },
+    'box': {
+        'start': '█',
+        'end': '█',
+        'fill': '█',
+    },
+    'classic': {
+        'start': '[',
+        'fill': '=',
+        'end': ']',
+    }
+}
+DEFAULT_STYLE = 'classic'
+
+def show_progress(current_value, total, style, max_width=None, show_values=True, show_percent=True):
+    if max_width is None:
+        max_width = os.get_terminal_size().columns
+
+    # Make label if required
+    label = ''
+    if show_percent:
+        percent = round((current_value / total) * 100)
+        label += str(percent) + '%'
+    if show_values:
+        if label:
+            label += ' '
+        label += '({}/{})'.format(round(current_value),round(total))
+    
+    # Make bar
+    bar_width = max_width - len(label)
+    var_width = bar_width - 2
+    variable_amount = math.floor(var_width * (current_value / total))
+
+    
+    bar = '{}{}{}'.format(
+        style['start'],
+        style['fill'] * variable_amount,
+        ' ' * (var_width - variable_amount),
+        style['end'],
+    )
+    print(bar + label)
+
+class ValueSource():
+    NUMBER_PATTERN = r'\d+([.]\d+)?'
+    def __init__(self, text):
+        self.source_text = text
+        self.has_worked = False
+        try:
+            self.static_value = float(text)
+            self.is_dynamic = False
+        except Exception as e:
+            self.static_value = None
+            self.is_dynamic = True
+
+    def evaluate(self):
+        command = shlex.split(self.source_text)
+        result = subprocess.run(command, capture_output=True)
+        text = result.stdout.decode('utf-8')
+        match = re.match(self.NUMBER_PATTERN, text)
+        if not match:
+            return None, text + result.stderr.decode('utf-8')
+        else:
+            return float(match.group(0)), None
+
+    def get_value(self):
+        if not self.is_dynamic:
+            return self.static_value, None
+        number, error = self.evaluate()
+        return number, error
+
+def do_progress(sources, style=DEFAULT_STYLE, show_percent=None, show_values=None, interval=2):
+    # Validate
+    if len(sources) != 2:
+        print('Invalid number of data sources. Specify two numbers (or sources).')
+        return False
+
+    # Get Style
+    if style is None:
+        style = DEFAULT_STYLE
+    matching_style = STYLES.get(style, None)
+    if matching_style is None:
+        print('Invalid style. Values are [{}]'.format(', '.join(STYLES.keys())))
+        return False
+
+    # Generate values 
+    sources = [ValueSource(s) for s in sources]
+    worked_once = False
+    dynamic = any([s.is_dynamic for s in sources])
+    while True:
+        # Evaluate the current values
+        values = []
+        errors = []
+        for source in sources:
+            value, error = source.get_value()
+            if not error:
+                values.append(value)
+            else:
+                errors.append(error)
+
+        # Do the display if we have the numbers
+        if len(values) == 2:
+            worked_once = True
+            values.sort()
+            first, second = values
+            current_value, total = values
+            show_progress(current_value, total, matching_style, show_values=show_values, show_percent=show_percent)
+        else:
+            print('ERR:', '\n'.join(errors))
+
+        # Determine whether to print once, bail, or keep getting new values
+        if not dynamic or (error and not worked_once):
+            break
+        else:
+            time.sleep(interval)
+    
+
+def cli():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('sources', nargs=2, help='Values; higher is used as the target, prefix with ! to run the command')
+    parser.add_argument('-v', '--no-values', default=False, action='store_true', help='Hide value')
+    parser.add_argument('-p', '--no-percent', default=False, action='store_true', help='Hide percent')
+    parser.add_argument('-s', '--style', default=None, help='Style of bar to use')
+    parser.add_argument('-i', '--interval', default=2, help='Seconds between watch')
+    args = parser.parse_args()
+
+    options = args.__dict__
+
+    do_progress(
+        args.sources,
+        show_values=not options['no_values'],
+        show_percent=not options['no_percent'],
+        style=options['style'],
+    )
+
+if __name__ == '__main__':
+    cli()
