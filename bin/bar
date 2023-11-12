@@ -2,9 +2,11 @@
 
 import subprocess
 import shlex
+import curses
 import argparse
 import math
 import time
+import sys
 import re
 import os
 
@@ -25,9 +27,9 @@ STYLES = {
         'end': ']',
     }
 }
-DEFAULT_STYLE = 'classic'
+DEFAULT_STYLE = 'box'
 
-def show_progress(current_value, total, style, max_width=None, show_values=True, show_percent=True):
+def show_progress(stdscr, current_value, total, style, max_width=None, show_values=True, show_percent=True):
     if max_width is None:
         max_width = os.get_terminal_size().columns
 
@@ -56,7 +58,9 @@ def show_progress(current_value, total, style, max_width=None, show_values=True,
         ' ' * (var_width - variable_amount),
         style['end'],
     )
-    print(bar + label)
+    stdscr.addstr(0, 0, bar + label)
+    stdscr.refresh()
+
 
 class ValueSource():
     NUMBER_PATTERN = r'\d+([.]\d+)?'
@@ -86,7 +90,7 @@ class ValueSource():
         number, error = self.evaluate()
         return number, error
 
-def do_progress(sources, style=DEFAULT_STYLE, show_percent=None, show_values=None, interval=2):
+def do_progress(stdscr, sources, style=DEFAULT_STYLE, show_percent=None, show_values=None, interval=2):
     # Validate
     if len(sources) != 2:
         print('Invalid number of data sources. Specify two numbers (or sources).')
@@ -121,13 +125,18 @@ def do_progress(sources, style=DEFAULT_STYLE, show_percent=None, show_values=Non
             values.sort()
             first, second = values
             current_value, total = values
-            show_progress(current_value, total, matching_style, show_values=show_values, show_percent=show_percent)
+            show_progress(stdscr, current_value, total, matching_style, show_values=show_values, show_percent=show_percent)
         else:
             print('ERR:', '\n'.join(errors))
 
         # Determine whether to print once, bail, or keep getting new values
-        if not dynamic or (error and not worked_once):
-            break
+        if not dynamic:
+            stdscr.getkey()
+            return False
+        if error and not worked_once:
+            return False
+        elif values[0] == values[1]:
+            return True
         else:
             time.sleep(interval)
     
@@ -138,17 +147,26 @@ def cli():
     parser.add_argument('-v', '--no-values', default=False, action='store_true', help='Hide value')
     parser.add_argument('-p', '--no-percent', default=False, action='store_true', help='Hide percent')
     parser.add_argument('-s', '--style', default=None, help='Style of bar to use')
-    parser.add_argument('-i', '--interval', default=2, help='Seconds between watch')
+    parser.add_argument('-i', '--interval', type=float, default=2, help='Seconds between watch')
     args = parser.parse_args()
 
     options = args.__dict__
 
-    do_progress(
-        args.sources,
-        show_values=not options['no_values'],
-        show_percent=not options['no_percent'],
-        style=options['style'],
-    )
+    def run(stdscr):
+        success = do_progress(
+            stdscr,
+            args.sources,
+            show_values=not options['no_values'],
+            show_percent=not options['no_percent'],
+            style=options['style'],
+            interval=options['interval'],
+        )
+        if success:
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    curses.filter()
+    curses.wrapper(run)
 
 if __name__ == '__main__':
     cli()
