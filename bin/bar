@@ -40,14 +40,17 @@ def show_progress(current_value, total, style, max_width=None, show_values=True,
         if label:
             label += ' '
         label += '({}/{})'.format(round(current_value),round(total))
+    if label:
+        # Pad the label if it exists
+        label = ' ' + label
     
     # Make bar
     bar_width = max_width - len(label)
-    var_width = bar_width - 2
+    var_width = bar_width - 3 # width of bar 
     variable_amount = math.floor(var_width * (current_value / total))
 
     
-    bar = '{}{}{}'.format(
+    bar = '{}{}{}{}'.format(
         style['start'],
         style['fill'] * variable_amount,
         ' ' * (var_width - variable_amount),
